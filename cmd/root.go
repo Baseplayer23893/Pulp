@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/Baseplayer23893/skillforge/cmd/tui"
-	"github.com/Baseplayer23893/skillforge/internal/config"
+	"github.com/Baseplayer23893/Pulp/cmd/tui"
+	"github.com/Baseplayer23893/Pulp/internal/config"
 	"github.com/spf13/cobra"
 )
 

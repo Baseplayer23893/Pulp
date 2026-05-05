@@ -14,7 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/Baseplayer23893/skillforge/internal/config"
+	"github.com/Baseplayer23893/Pulp/internal/config"
 )
 
 // ── State machine ──

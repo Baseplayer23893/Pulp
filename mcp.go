@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Baseplayer23893/skillforge/internal/cleaner"
-	"github.com/Baseplayer23893/skillforge/internal/defuddle"
+	"github.com/Baseplayer23893/Pulp/internal/cleaner"
+	"github.com/Baseplayer23893/Pulp/internal/defuddle"
 )
 
 // ---------------------------------------------------------------------------

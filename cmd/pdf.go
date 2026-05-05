@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Baseplayer23893/skillforge/internal/cleaner"
-	"github.com/Baseplayer23893/skillforge/internal/storage"
+	"github.com/Baseplayer23893/Pulp/internal/cleaner"
+	"github.com/Baseplayer23893/Pulp/internal/storage"
 	"github.com/ledongthuc/pdf"
 	"github.com/spf13/cobra"
 )

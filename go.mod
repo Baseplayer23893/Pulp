@@ -1,4 +1,4 @@
-module github.com/Baseplayer23893/skillforge
+module github.com/Baseplayer23893/Pulp
 
 go 1.26.2
 

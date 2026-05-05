@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/Baseplayer23893/skillforge/cmd"
+	"github.com/Baseplayer23893/Pulp/cmd"
 )
 
 func main() {
