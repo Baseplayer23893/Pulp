@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}/${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            arch: amd64
+            ext: ""
+          - goos: linux
+            arch: arm64
+            ext: ""
+          - goos: darwin
+            arch: amd64
+            ext: ""
+          - goos: darwin
+            arch: arm64
+            ext: ""
+          - goos: windows
+            arch: amd64
+            ext: ".exe"
+          - goos: windows
+            arch: arm64
+            ext: ".exe"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: "0"
+        run: |
+          BINARY_NAME="pulp-${{ matrix.goos }}-${{ matrix.arch }}${{ matrix.ext }}"
+          go build -ldflags="-s -w -X github.com/Baseplayer23893/skillforge/cmd.version=${{ github.ref_name }}" \
+            -o "dist/${BINARY_NAME}" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pulp-${{ matrix.goos }}-${{ matrix.arch }}
+          path: dist/
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
