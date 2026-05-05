@@ -227,7 +227,7 @@ func handleInitialize(req jsonRPCRequest) jsonRPCResponse {
 			},
 			"serverInfo": map[string]string{
 				"name":    "pulp",
-				"version": "0.2.0",
+				"version": "0.3.1",
 			},
 		},
 	}
