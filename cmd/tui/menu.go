@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -305,8 +307,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "h":
 			m.history = config.LoadHistory()
 			m.state = stateHistory
+			m.cursor = 0 // reset so history always opens at top
 		case "s":
 			m.state = stateSettings
+			m.settingsCursor = 0
+			m.settingsEditing = false
 		case "enter":
 			return m.selectMenuItem()
 		}
@@ -347,6 +352,28 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Re-squeeze
 			m.state = stateSqueezing
 			return m, tea.Batch(m.spinner.Tick, m.startSqueeze())
+		case "s":
+			// Save output to a file in the configured output dir
+			if m.squeezeOutput != "" {
+				cfg := config.Load()
+				outDir := cfg.OutputDir
+				if outDir == "" || outDir == "." {
+					outDir, _ = os.Getwd()
+				}
+				// Derive a filename from the URL slug
+				slug := filepath.Base(strings.TrimRight(m.squeezeURL, "/"))
+				if slug == "." || slug == "" {
+					slug = "output"
+				}
+				out := filepath.Join(outDir, slug+".md")
+				os.MkdirAll(outDir, 0755)
+				os.WriteFile(out, []byte(m.squeezeOutput), 0644)
+			}
+		case "c":
+			// Copy output to system clipboard
+			if m.squeezeOutput != "" {
+				clipboard.WriteAll(m.squeezeOutput)
+			}
 		}
 		var cmd tea.Cmd
 		m.viewport, cmd = m.viewport.Update(msg)
@@ -354,6 +381,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// ════ HISTORY ════
 	case stateHistory:
+		// maxShow mirrors the view's calculation so cursor never goes invisible
+		maxVisible := func() int {
+			entries := m.history.Recent(30)
+			n := m.height - 10
+			if n > len(entries) {
+				n = len(entries)
+			}
+			if n < 1 {
+				n = 1
+			}
+			return n
+		}
 		switch key {
 		case "esc", "q":
 			m.state = stateHome
@@ -362,43 +401,61 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.cursor--
 			}
 		case "down", "j":
-			entries := m.history.Recent(30)
-			if m.cursor < len(entries)-1 {
+			if m.cursor < maxVisible()-1 {
 				m.cursor++
 			}
 		case "d":
-			entries := m.history.Recent(30)
-			if len(entries) > 0 && m.cursor < len(entries) {
+			if mv := maxVisible(); mv > 0 && m.cursor < mv {
 				// Delete persists immediately to history.json
 				m.history.Delete(m.cursor)
 				// Clamp cursor so it stays in bounds after removal
-				if m.cursor > 0 && m.cursor >= len(m.history.Recent(30)) {
+				newMax := maxVisible()
+				if m.cursor > 0 && m.cursor >= newMax {
 					m.cursor--
 				}
+			}
+		case "r":
+			// Re-squeeze the selected history entry
+			entries := m.history.Recent(30)
+			if len(entries) > 0 && m.cursor < len(entries) {
+				e := entries[m.cursor]
+				m.squeezeURL = e.URL
+				// Map source name back to menu index
+				for i, item := range menuItems {
+					if item.cmd == e.Source {
+						m.selectedSource = i
+						break
+					}
+				}
+				m.state = stateSqueezing
+				return m, tea.Batch(m.spinner.Tick, m.startSqueeze())
 			}
 		}
 
 	// ════ SETTINGS ════
 	case stateSettings:
 		if m.settingsEditing {
-			// Inside an active text-input field
+			// Inside an active text-input field — only intercept Enter/Esc;
+			// everything else must be forwarded directly to the input model.
 			switch key {
 			case "enter":
-				// Commit the edited value
 				v := strings.TrimSpace(m.settingsInput.Value())
 				if v != "" {
 					m.settingsValues[m.settingsCursor] = v
 				}
 				m.settingsEditing = false
 				m.settingsInput.Blur()
+				return m, nil
 			case "esc":
-				// Discard changes
 				m.settingsEditing = false
 				m.settingsInput.Blur()
+				return m, nil
 			default:
-				// All other keys go to the text input (handled in Update passthrough)
+				// Forward the raw key event to the text input so the user can type.
+				var cmd tea.Cmd
+				m.settingsInput, cmd = m.settingsInput.Update(msg)
+				return m, cmd
 			}
-			return m, nil
 		}
 
 		// Browse mode (not editing)
@@ -462,6 +519,8 @@ func (m Model) selectMenuItem() (tea.Model, tea.Cmd) {
 		return m, nil
 	case 7: // Settings
 		m.state = stateSettings
+		m.settingsCursor = 0
+		m.settingsEditing = false
 		return m, nil
 	default: // Sources (0-4)
 		m.selectedSource = m.cursor
@@ -727,7 +786,8 @@ func (m Model) viewHistory() string {
 
 	var s strings.Builder
 
-	total := len(entries)
+	// Total reflects all entries, not just the visible cap of 30
+	total := len(m.history.Entries)
 	header := headerStyle(w).Render(fmt.Sprintf("  pulp  ›  history                              %d squeezes", total))
 	s.WriteString(header)
 	s.WriteString("\n\n")
