@@ -49,6 +49,7 @@ type YouTubeInfo struct {
 
 func runYoutube(cmd *cobra.Command, args []string) error {
 	url := args[0]
+	targetOutput := resolveOutputPath(outputFlag, url, ".md")
 
 	if !quietFlag {
 		fmt.Fprintf(os.Stderr, "🎬 Extracting YouTube transcript: %s\n", url)
@@ -117,7 +118,7 @@ func runYoutube(cmd *cobra.Command, args []string) error {
 	output := cleaner.AddFrontmatter(markdown, meta)
 
 	// Write output
-	if err := storage.WriteOutput(output, outputFlag); err != nil {
+	if err := storage.WriteOutput(output, targetOutput); err != nil {
 		return fmt.Errorf("failed to write output: %w", err)
 	}
 
@@ -125,8 +126,8 @@ func runYoutube(cmd *cobra.Command, args []string) error {
 		elapsed := time.Since(start)
 		wordCount := len(strings.Fields(transcript))
 		target := "stdout"
-		if outputFlag != "" {
-			target = outputFlag
+		if targetOutput != "" {
+			target = targetOutput
 		}
 		fmt.Fprintf(os.Stderr, "✅ Done: %d words → %s (%s)\n", wordCount, target, elapsed.Round(time.Millisecond))
 	}

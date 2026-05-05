@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ func init() {
 
 func runExtract(cmd *cobra.Command, args []string) error {
 	url := args[0]
+	targetOutput := resolveOutputPath(outputFlag, url, ".md")
 
 	if !quietFlag {
 		fmt.Fprintf(os.Stderr, "⚡ Extracting: %s\n", url)
@@ -95,7 +97,11 @@ func runExtract(cmd *cobra.Command, args []string) error {
 		frontmatter := storage.GenerateFrontmatter(name, result.Description, url, nil)
 		content := frontmatter + "# " + name + "\n\n" + markdown
 
-		zipPath, err := storage.CreateSkillZip(name, content, nil, ".")
+		zipDir := "."
+		if targetOutput != "" {
+			zipDir = filepath.Dir(targetOutput)
+		}
+		zipPath, err := storage.CreateSkillZip(name, content, nil, zipDir)
 		if err != nil {
 			return fmt.Errorf("failed to create skill.zip: %w", err)
 		}
@@ -111,7 +117,7 @@ func runExtract(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write output
-	if err := storage.WriteOutput(output, outputFlag); err != nil {
+	if err := storage.WriteOutput(output, targetOutput); err != nil {
 		return fmt.Errorf("failed to write output: %w", err)
 	}
 
@@ -119,8 +125,8 @@ func runExtract(cmd *cobra.Command, args []string) error {
 		elapsed := time.Since(start)
 		wordCount := len(strings.Fields(markdown))
 		target := "stdout"
-		if outputFlag != "" {
-			target = outputFlag
+		if targetOutput != "" {
+			target = targetOutput
 		}
 		fmt.Fprintf(os.Stderr, "✅ Done: %d words → %s (%s)\n", wordCount, target, elapsed.Round(time.Millisecond))
 	}

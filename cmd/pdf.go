@@ -25,6 +25,7 @@ func init() {
 
 func runPDF(cmd *cobra.Command, args []string) error {
 	filePath := args[0]
+	targetOutput := resolveOutputPath(outputFlag, filePath, ".md")
 	if !quietFlag {
 		fmt.Fprintf(os.Stderr, "📄 Extracting PDF: %s\n", filePath)
 	}
@@ -71,13 +72,17 @@ func runPDF(cmd *cobra.Command, args []string) error {
 	}
 	output := cleaner.AddFrontmatter(markdown, meta)
 
-	if err := storage.WriteOutput(output, outputFlag); err != nil {
+	if err := storage.WriteOutput(output, targetOutput); err != nil {
 		return err
 	}
 
 	if !quietFlag {
 		elapsed := time.Since(start)
-		fmt.Fprintf(os.Stderr, "✅ Done: %d pages, %d words (%s)\n", totalPages, len(strings.Fields(markdown)), elapsed.Round(time.Millisecond))
+		target := "stdout"
+		if targetOutput != "" {
+			target = targetOutput
+		}
+		fmt.Fprintf(os.Stderr, "✅ Done: %d pages, %d words → %s (%s)\n", totalPages, len(strings.Fields(markdown)), target, elapsed.Round(time.Millisecond))
 	}
 	return nil
 }

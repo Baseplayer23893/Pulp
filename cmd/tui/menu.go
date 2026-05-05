@@ -1071,6 +1071,7 @@ func (m Model) startSqueeze(ctx context.Context, reqID int) tea.Cmd {
 		}
 
 		cmd := exec.CommandContext(ctx, exe, cmdName, m.squeezeURL, "-q")
+		cmd.Env = append(os.Environ(), "PULP_FORCE_STDOUT=1")
 		out, err := cmd.CombinedOutput()
 		dur := time.Since(start)
 

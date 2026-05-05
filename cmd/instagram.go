@@ -35,17 +35,17 @@ func init() {
 
 // InstagramInfo holds reel metadata from yt-dlp
 type InstagramInfo struct {
-	Title             string `json:"title"`
-	Description       string `json:"description"`
-	Uploader          string `json:"uploader"`
-	UploaderID        string `json:"uploader_id"`
-	Channel           string `json:"channel"`
-	ChannelID         string `json:"channel_id"`
-	Timestamp         int64  `json:"timestamp"`
-	LikeCount         int    `json:"like_count"`
-	CommentCount      int    `json:"comment_count"`
-	Duration          int    `json:"duration"`
-	ViewCount         int    `json:"view_count"`
+	Title             string                     `json:"title"`
+	Description       string                     `json:"description"`
+	Uploader          string                     `json:"uploader"`
+	UploaderID        string                     `json:"uploader_id"`
+	Channel           string                     `json:"channel"`
+	ChannelID         string                     `json:"channel_id"`
+	Timestamp         int64                      `json:"timestamp"`
+	LikeCount         int                        `json:"like_count"`
+	CommentCount      int                        `json:"comment_count"`
+	Duration          int                        `json:"duration"`
+	ViewCount         int                        `json:"view_count"`
 	Subtitles         map[string][]SubtitleEntry `json:"subtitles"`
 	AutomaticCaptions map[string][]SubtitleEntry `json:"automatic_captions"`
 }
@@ -59,6 +59,7 @@ type SubtitleEntry struct {
 
 func runInstagram(cmd *cobra.Command, args []string) error {
 	url := args[0]
+	targetOutput := resolveOutputPath(outputFlag, url, ".md")
 
 	// Normalize Instagram URL
 	url = normalizeInstagramURL(url)
@@ -159,7 +160,7 @@ func runInstagram(cmd *cobra.Command, args []string) error {
 	output := cleaner.AddFrontmatter(markdown, meta)
 
 	// Write output
-	if err := storage.WriteOutput(output, outputFlag); err != nil {
+	if err := storage.WriteOutput(output, targetOutput); err != nil {
 		return fmt.Errorf("failed to write output: %w", err)
 	}
 
@@ -167,8 +168,8 @@ func runInstagram(cmd *cobra.Command, args []string) error {
 		elapsed := time.Since(start)
 		wordCount := len(strings.Fields(markdown))
 		target := "stdout"
-		if outputFlag != "" {
-			target = outputFlag
+		if targetOutput != "" {
+			target = targetOutput
 		}
 		parts := []string{fmt.Sprintf("%d words", wordCount)}
 		if transcript != "" {
