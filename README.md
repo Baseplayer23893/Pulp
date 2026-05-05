@@ -123,7 +123,7 @@ Drop it in your skills directory and your AI has the context.
 - [x] PDF extraction
 - [x] Beautiful TUI (Bubble Tea)
 - [x] Skill packaging
-- [ ] MCP server (v0.2)
+- [x] MCP server (v0.2)
 - [ ] Web dashboard (v0.3)
 - [ ] Cloud sync (future)
 
