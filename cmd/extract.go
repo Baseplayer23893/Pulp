@@ -1,0 +1,145 @@
+package cmd
+
+import (
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/Baseplayer23893/skillforge/internal/cleaner"
+	"github.com/Baseplayer23893/skillforge/internal/defuddle"
+	"github.com/Baseplayer23893/skillforge/internal/storage"
+	"github.com/spf13/cobra"
+)
+
+var extractCmd = &cobra.Command{
+	Use:   "extract <url>",
+	Short: "Extract web page content as clean markdown",
+	Long: `Extract clean, token-efficient markdown from any web page.
+Uses defuddle under the hood for high-quality content extraction,
+then applies post-processing to clean tracking params, normalize
+whitespace, and add YAML frontmatter.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runExtract,
+}
+
+func init() {
+	rootCmd.AddCommand(extractCmd)
+}
+
+func runExtract(cmd *cobra.Command, args []string) error {
+	url := args[0]
+
+	if !quietFlag {
+		fmt.Fprintf(os.Stderr, "⚡ Extracting: %s\n", url)
+	}
+
+	// Check defuddle is available
+	if !defuddle.IsInstalled() {
+		return fmt.Errorf("defuddle is not installed\nInstall with: npm install -g defuddle")
+	}
+
+	start := time.Now()
+
+	// Extract with defuddle
+	result, err := defuddle.ParseURL(url)
+	if err != nil {
+		return fmt.Errorf("extraction failed: %w", err)
+	}
+
+	// Get the markdown content
+	markdown := result.Markdown
+	if markdown == "" {
+		markdown = result.Content
+	}
+	if markdown == "" {
+		return fmt.Errorf("no content extracted from %s", url)
+	}
+
+	// Clean the markdown
+	markdown = cleaner.Clean(markdown)
+
+	// Build output based on format
+	var output string
+	switch formatFlag {
+	case "md":
+		// Add frontmatter
+		meta := map[string]string{
+			"source":  url,
+			"created": time.Now().Format("2006-01-02"),
+		}
+		if result.Title != "" {
+			meta["title"] = result.Title
+		}
+		if result.Description != "" {
+			desc := result.Description
+			if len(desc) > 120 {
+				desc = desc[:120] + "..."
+			}
+			meta["description"] = desc
+		}
+		if result.Author != "" {
+			meta["author"] = result.Author
+		}
+		if result.Domain != "" {
+			meta["domain"] = result.Domain
+		}
+
+		output = cleaner.AddFrontmatter(markdown, meta)
+
+	case "skillzip":
+		name := result.Title
+		if name == "" {
+			name = sanitizeURLToName(url)
+		}
+		frontmatter := storage.GenerateFrontmatter(name, result.Description, url, nil)
+		content := frontmatter + "# " + name + "\n\n" + markdown
+
+		zipPath, err := storage.CreateSkillZip(name, content, nil, ".")
+		if err != nil {
+			return fmt.Errorf("failed to create skill.zip: %w", err)
+		}
+
+		if !quietFlag {
+			elapsed := time.Since(start)
+			fmt.Fprintf(os.Stderr, "✅ Created: %s (%s)\n", zipPath, elapsed.Round(time.Millisecond))
+		}
+		return nil
+
+	default:
+		output = markdown
+	}
+
+	// Write output
+	if err := storage.WriteOutput(output, outputFlag); err != nil {
+		return fmt.Errorf("failed to write output: %w", err)
+	}
+
+	if !quietFlag {
+		elapsed := time.Since(start)
+		wordCount := len(strings.Fields(markdown))
+		target := "stdout"
+		if outputFlag != "" {
+			target = outputFlag
+		}
+		fmt.Fprintf(os.Stderr, "✅ Done: %d words → %s (%s)\n", wordCount, target, elapsed.Round(time.Millisecond))
+	}
+
+	return nil
+}
+
+func sanitizeURLToName(rawURL string) string {
+	// Extract meaningful name from URL
+	name := rawURL
+	name = strings.TrimPrefix(name, "https://")
+	name = strings.TrimPrefix(name, "http://")
+	name = strings.TrimPrefix(name, "www.")
+	name = strings.Split(name, "?")[0]
+	name = strings.TrimSuffix(name, "/")
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, ".", "-")
+	if len(name) > 60 {
+		name = name[:60]
+	}
+	return name
+}
