@@ -1,23 +1,20 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"gopkg.in/yaml.v3"
 )
 
 // Config holds Pulp configuration
 type Config struct {
 	// OutputDir is the default output directory for extracted content
-	OutputDir string `yaml:"output_dir"`
+	OutputDir string `json:"output_dir"`
 	// DefaultFormat is the default output format (md, skillzip, single)
-	DefaultFormat string `yaml:"default_format"`
-	// HistoryFile tracks extraction history
-	HistoryFile string `yaml:"history_file"`
+	DefaultFormat string `json:"default_format"`
 	// MaxHistory is the maximum number of history entries to keep
-	MaxHistory int `yaml:"max_history"`
+	MaxHistory int `json:"max_history"`
 }
 
 // DefaultConfig returns the default configuration
@@ -25,57 +22,72 @@ func DefaultConfig() *Config {
 	return &Config{
 		OutputDir:     ".",
 		DefaultFormat: "md",
-		HistoryFile:   filepath.Join(ConfigDir(), "history.json"),
 		MaxHistory:    100,
 	}
 }
 
-// ConfigDir returns the Pulp config directory
+// ConfigDir returns the Pulp config directory using the OS-native config path.
+// On Linux: ~/.config/pulp
+// On macOS: ~/Library/Application Support/pulp
+// On Windows: %AppData%\pulp
 func ConfigDir() string {
-	home, err := os.UserHomeDir()
+	base, err := os.UserConfigDir()
 	if err != nil {
-		return ".pulp"
+		// fallback: use ~/.config/pulp manually
+		home, herr := os.UserHomeDir()
+		if herr != nil {
+			return ".pulp"
+		}
+		return filepath.Join(home, ".config", "pulp")
 	}
-	return filepath.Join(home, ".config", "pulp")
+	return filepath.Join(base, "pulp")
 }
 
-// ConfigPath returns the path to the config file
+// ConfigPath returns the path to the JSON config file inside the config dir.
 func ConfigPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ".pulp.yaml"
-	}
-	return filepath.Join(home, ".pulp.yaml")
+	return filepath.Join(ConfigDir(), "config.json")
 }
 
-// Load reads config from ~/.pulp.yaml
-// Falls back to defaults if file doesn't exist
+// HistoryPath returns the path to the JSON history file inside the config dir.
+func HistoryPath() string {
+	return filepath.Join(ConfigDir(), "history.json")
+}
+
+// EnsureConfigDir creates the config directory if it doesn't exist.
+func EnsureConfigDir() error {
+	return os.MkdirAll(ConfigDir(), 0755)
+}
+
+// Load reads config from the config directory.
+// Falls back to defaults if file doesn't exist or cannot be parsed.
 func Load() *Config {
 	cfg := DefaultConfig()
 
 	data, err := os.ReadFile(ConfigPath())
 	if err != nil {
+		// File doesn't exist yet — that's fine, return defaults.
 		return cfg
 	}
 
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	if err := json.Unmarshal(data, cfg); err != nil {
 		return DefaultConfig()
 	}
 
 	return cfg
 }
 
-// Save writes the current config to ~/.pulp.yaml
+// Save writes the current config as JSON to the config directory.
 func (c *Config) Save() error {
-	data, err := yaml.Marshal(c)
+	if err := EnsureConfigDir(); err != nil {
+		return fmt.Errorf("failed to create config dir: %w", err)
+	}
+
+	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	header := []byte("# Pulp Configuration\n# See: https://github.com/Baseplayer23893/Pulp\n\n")
-	content := append(header, data...)
-
-	return os.WriteFile(ConfigPath(), content, 0644)
+	return os.WriteFile(ConfigPath(), data, 0644)
 }
 
 // ResolveOutputDir returns the output directory with precedence:
@@ -91,9 +103,4 @@ func ResolveOutputDir(cliFlag string) string {
 	}
 
 	return "."
-}
-
-// EnsureConfigDir creates the config directory if it doesn't exist
-func EnsureConfigDir() error {
-	return os.MkdirAll(ConfigDir(), 0755)
 }

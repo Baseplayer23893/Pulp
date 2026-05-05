@@ -64,7 +64,7 @@ var configCmd = &cobra.Command{
 		fmt.Printf("Config file:    %s\n", config.ConfigPath())
 		fmt.Printf("Output dir:     %s\n", cfg.OutputDir)
 		fmt.Printf("Default format: %s\n", cfg.DefaultFormat)
-		fmt.Printf("History file:   %s\n", cfg.HistoryFile)
+		fmt.Printf("History file:   %s\n", config.HistoryPath())
 		fmt.Printf("Max history:    %d\n", cfg.MaxHistory)
 		return nil
 	},
@@ -72,7 +72,7 @@ var configCmd = &cobra.Command{
 
 var configInitCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Create default config file at ~/.pulp.yaml",
+	Short: "Create default config file in the Pulp config directory",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := config.DefaultConfig()
 		if err := cfg.Save(); err != nil {

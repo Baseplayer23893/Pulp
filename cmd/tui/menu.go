@@ -84,8 +84,10 @@ type Model struct {
 	history *config.History
 
 	// Settings
-	settingsCursor int
-	settingsValues [2]string // output_dir, format
+	settingsCursor  int
+	settingsValues  [2]string // output_dir, format
+	settingsEditing bool
+	settingsInput   textinput.Model
 }
 
 func initialModel() Model {
@@ -125,6 +127,14 @@ func initialModel() Model {
 	// Settings
 	cfg := config.Load()
 
+	si := textinput.New()
+	si.Prompt = "  "
+	si.CharLimit = 256
+	si.Width = 40
+	si.PromptStyle = lipgloss.NewStyle().Foreground(colorOrange)
+	si.PlaceholderStyle = lipgloss.NewStyle().Foreground(colorMuted)
+	si.TextStyle = lipgloss.NewStyle().Foreground(colorBright)
+
 	return Model{
 		state:          stateHome,
 		quickInput:     qi,
@@ -133,6 +143,7 @@ func initialModel() Model {
 		progress:       prog,
 		history:        hist,
 		settingsValues: [2]string{cfg.OutputDir, cfg.DefaultFormat},
+		settingsInput:  si,
 	}
 }
 
@@ -231,6 +242,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.state == stateResult {
 		var cmd tea.Cmd
 		m.viewport, cmd = m.viewport.Update(msg)
+		return m, cmd
+	}
+	if m.state == stateSettings && m.settingsEditing {
+		var cmd tea.Cmd
+		m.settingsInput, cmd = m.settingsInput.Update(msg)
 		return m, cmd
 	}
 
@@ -350,19 +366,77 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.cursor < len(entries)-1 {
 				m.cursor++
 			}
+		case "d":
+			entries := m.history.Recent(30)
+			if len(entries) > 0 && m.cursor < len(entries) {
+				// Delete persists immediately to history.json
+				m.history.Delete(m.cursor)
+				// Clamp cursor so it stays in bounds after removal
+				if m.cursor > 0 && m.cursor >= len(m.history.Recent(30)) {
+					m.cursor--
+				}
+			}
 		}
 
 	// ════ SETTINGS ════
 	case stateSettings:
+		if m.settingsEditing {
+			// Inside an active text-input field
+			switch key {
+			case "enter":
+				// Commit the edited value
+				v := strings.TrimSpace(m.settingsInput.Value())
+				if v != "" {
+					m.settingsValues[m.settingsCursor] = v
+				}
+				m.settingsEditing = false
+				m.settingsInput.Blur()
+			case "esc":
+				// Discard changes
+				m.settingsEditing = false
+				m.settingsInput.Blur()
+			default:
+				// All other keys go to the text input (handled in Update passthrough)
+			}
+			return m, nil
+		}
+
+		// Browse mode (not editing)
 		switch key {
 		case "esc":
 			m.state = stateHome
 		case "s":
+			// Save current in-memory values and exit
 			cfg := config.Load()
 			cfg.OutputDir = m.settingsValues[0]
 			cfg.DefaultFormat = m.settingsValues[1]
-			cfg.Save()
+			cfg.Save() // writes to ~/.config/pulp/config.json
 			m.state = stateHome
+		case "enter":
+			// Open the current field for editing
+			m.settingsInput.SetValue(m.settingsValues[m.settingsCursor])
+			m.settingsInput.CursorEnd()
+			m.settingsEditing = true
+			m.settingsInput.Focus()
+			return m, textinput.Blink
+		case "left", "h", "right", "l":
+			// Cycle DefaultFormat (field index 1) with arrow keys
+			if m.settingsCursor == 1 {
+				formats := []string{"md", "skillzip", "single"}
+				cur := 0
+				for i, f := range formats {
+					if f == m.settingsValues[1] {
+						cur = i
+						break
+					}
+				}
+				if key == "left" || key == "h" {
+					cur = (cur - 1 + len(formats)) % len(formats)
+				} else {
+					cur = (cur + 1) % len(formats)
+				}
+				m.settingsValues[1] = formats[cur]
+			}
 		case "up", "k":
 			if m.settingsCursor > 0 {
 				m.settingsCursor--
@@ -714,6 +788,7 @@ func (m Model) viewHistory() string {
 
 	s.WriteString("\n\n")
 	hints := keyHint("↑↓", "Navigate") + "   " +
+		keyHint("D", "Delete") + "   " +
 		keyHint("R", "Re-squeeze") + "   " +
 		keyHint("ESC", "Back")
 	s.WriteString("  " + hints)
@@ -735,24 +810,43 @@ func (m Model) viewSettings() string {
 	s.WriteString(header)
 	s.WriteString("\n\n")
 
-	// Defaults
-	fields := []struct {
+	// Field labels and values
+	type settingsField struct {
 		label string
 		value string
-	}{
-		{"Output directory", m.settingsValues[0]},
-		{"Default format", m.settingsValues[1]},
+		hint  string
+	}
+	fields := []settingsField{
+		{"Output directory", m.settingsValues[0], "free text path"},
+		{"Default format", m.settingsValues[1], "md · skillzip · single"},
 	}
 
 	var defContent strings.Builder
 	for i, f := range fields {
-		cursor := "  "
-		style := lipgloss.NewStyle().Foreground(colorText)
-		if i == m.settingsCursor {
-			cursor = lipgloss.NewStyle().Foreground(colorOrange).Bold(true).Render("▸ ")
-			style = lipgloss.NewStyle().Foreground(colorBright)
+		isCurrent := i == m.settingsCursor
+		isEditingThis := isCurrent && m.settingsEditing
+
+		cursorStr := "  "
+		if isCurrent {
+			cursorStr = lipgloss.NewStyle().Foreground(colorOrange).Bold(true).Render("▸ ")
 		}
-		defContent.WriteString(fmt.Sprintf("  %s%-20s %s\n", cursor, f.label, style.Render(f.value)))
+
+		var valueStr string
+		if isEditingThis {
+			// Show the live text input
+			valueStr = m.settingsInput.View()
+		} else if isCurrent {
+			valueStr = lipgloss.NewStyle().Foreground(colorBright).Bold(true).Render(f.value)
+		} else {
+			valueStr = lipgloss.NewStyle().Foreground(colorText).Render(f.value)
+		}
+
+		hintStr := ""
+		if isCurrent && !m.settingsEditing {
+			hintStr = "  " + lipgloss.NewStyle().Foreground(colorMuted).Italic(true).Render(f.hint)
+		}
+
+		defContent.WriteString(fmt.Sprintf("  %s%-20s %s%s\n", cursorStr, f.label, valueStr, hintStr))
 	}
 
 	defPanel := panelStyle.Width(w - 4).Render(defContent.String())
@@ -783,7 +877,16 @@ func (m Model) viewSettings() string {
 	s.WriteString(toolPanel)
 	s.WriteString("\n\n")
 
-	hints := keyHint("S", "Save") + "   " + keyHint("ESC", "Cancel")
+	var hints string
+	if m.settingsEditing {
+		hints = keyHint("Enter", "Confirm") + "   " + keyHint("ESC", "Cancel edit")
+	} else {
+		hints = keyHint("↑↓", "Navigate") + "   " +
+			keyHint("Enter", "Edit") + "   " +
+			keyHint("←→", "Cycle format") + "   " +
+			keyHint("S", "Save & exit") + "   " +
+			keyHint("ESC", "Cancel")
+	}
 	s.WriteString("  " + hints)
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Top, s.String())

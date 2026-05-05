@@ -10,12 +10,12 @@ import (
 
 // HistoryEntry tracks a single extraction
 type HistoryEntry struct {
-	URL       string `json:"url"`
-	Source    string `json:"source"`    // extract, youtube, instagram, reddit, pdf
-	Title     string `json:"title"`
+	URL        string `json:"url"`
+	Source     string `json:"source"`     // extract, youtube, instagram, reddit, pdf
+	Title      string `json:"title"`
 	OutputFile string `json:"output_file"`
-	WordCount int    `json:"word_count"`
-	Timestamp string `json:"timestamp"`
+	WordCount  int    `json:"word_count"`
+	Timestamp  string `json:"timestamp"`
 }
 
 // History manages extraction history
@@ -24,13 +24,14 @@ type History struct {
 	mu      sync.Mutex
 }
 
-// LoadHistory reads history from disk
+// LoadHistory reads history from disk.
+// Returns an empty History if the file does not exist yet.
 func LoadHistory() *History {
 	h := &History{}
-	cfg := Load()
 
-	data, err := os.ReadFile(cfg.HistoryFile)
+	data, err := os.ReadFile(HistoryPath())
 	if err != nil {
+		// File doesn't exist yet — that's fine.
 		return h
 	}
 
@@ -38,7 +39,7 @@ func LoadHistory() *History {
 	return h
 }
 
-// Add appends a new entry and persists to disk
+// Add appends a new entry (newest first) and immediately persists to disk.
 func (h *History) Add(entry HistoryEntry) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -59,7 +60,21 @@ func (h *History) Add(entry HistoryEntry) error {
 	return h.save()
 }
 
-// Recent returns the N most recent entries
+// Delete removes the entry at the given index (0-based, into the Recent slice)
+// and immediately persists the updated list to disk.
+func (h *History) Delete(index int) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if index < 0 || index >= len(h.Entries) {
+		return fmt.Errorf("index %d out of range", index)
+	}
+
+	h.Entries = append(h.Entries[:index], h.Entries[index+1:]...)
+	return h.save()
+}
+
+// Recent returns the N most recent entries.
 func (h *History) Recent(n int) []HistoryEntry {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -70,7 +85,7 @@ func (h *History) Recent(n int) []HistoryEntry {
 	return h.Entries[:n]
 }
 
-// Stats returns summary statistics
+// Stats returns summary statistics.
 func (h *History) Stats() (total int, bySource map[string]int, totalWords int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -83,9 +98,8 @@ func (h *History) Stats() (total int, bySource map[string]int, totalWords int) {
 	return len(h.Entries), bySource, totalWords
 }
 
+// save writes the history to history.json. Caller must hold h.mu.
 func (h *History) save() error {
-	cfg := Load()
-
 	if err := EnsureConfigDir(); err != nil {
 		return fmt.Errorf("failed to create config dir: %w", err)
 	}
@@ -95,5 +109,5 @@ func (h *History) save() error {
 		return fmt.Errorf("failed to marshal history: %w", err)
 	}
 
-	return os.WriteFile(cfg.HistoryFile, data, 0644)
+	return os.WriteFile(HistoryPath(), data, 0644)
 }
