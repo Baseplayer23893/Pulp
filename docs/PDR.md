@@ -1,4 +1,4 @@
-# SkillForge - Product Design Document
+# Pulp - Product Design Document
 
 > Open-source createskills alternative — extract clean markdown from web content and package for AI workflows.
 
@@ -13,13 +13,13 @@ Current tools like createskills solve a real problem: turning noisy web content 
 - Some features (YouTube transcripts, MCP server) are **paywalled**
 - No open-source alternative exists
 
-**SkillForge** solves this by being fully open-source, local-first, and free forever.
+**Pulp** solves this by being fully open-source, local-first, and free forever.
 
 ---
 
 ## 2. Product Overview
 
-### What is SkillForge?
+### What is Pulp?
 
 A utility ecosystem that extracts clean markdown from web content and packages it for AI models, custom agents, and local LLM workflows.
 
@@ -70,14 +70,14 @@ A utility ecosystem that extracts clean markdown from web content and packages i
 ### Core Commands
 
 ```bash
-skillforge extract <url>              # Extract web page → markdown
-skillforge youtube <url>               # Get YouTube transcript
-skillforge instagram <url>            # Extract Instagram Reel
-skillforge reddit <url>               # Get Reddit post
-skillforge pdf <file>                 # Extract text from PDF
-skillforge package <name>             # Create skill.zip from extracted content
-skillforge serve                      # Start local dashboard
-skillforge install                    # Install CLI to PATH
+pulp extract <url>              # Extract web page → markdown
+pulp youtube <url>               # Get YouTube transcript
+pulp instagram <url>            # Extract Instagram Reel
+pulp reddit <url>               # Get Reddit post
+pulp pdf <file>                 # Extract text from PDF
+pulp package <name>             # Create skill.zip from extracted content
+pulp serve                      # Start local dashboard
+pulp install                    # Install CLI to PATH
 ```
 
 ### Optional Flags
@@ -119,7 +119,7 @@ skillforge install                    # Install CLI to PATH
 ### Directory Structure
 
 ```
-skillforge/
+pulp/
 ├── cli/                    # Main CLI tool
 │   ├── main.go            # Entry point
 │   ├── cmd/
@@ -139,7 +139,7 @@ skillforge/
 │   └── static/
 ├── mcp/                   # MCP server (future)
 └── brain-integration/     # Hooks into brain CLI
-    └── skillforge-process # brain skill
+    └── pulp-process       # brain skill
 ```
 
 ### Data Flow
@@ -272,7 +272,7 @@ Content here...
 Add to `~/.local/bin/brain`:
 
 ```bash
-skillforge extract "$NOTE" -o ~/brain/00-Inbox/
+pulp extract "$NOTE" -o ~/brain/00-Inbox/
 ```
 
 ### 8.2 Workflow
@@ -280,9 +280,9 @@ skillforge extract "$NOTE" -o ~/brain/00-Inbox/
 ```
 Web Research
     ↓
-skillforge extract <url>
+pulp extract <url>
     ↓
-skillforge package my-research
+pulp package my-research
     ↓
 Copy skill.zip to ~/.claude/skills/
     ↓
@@ -291,12 +291,12 @@ Claude Code / Cursor has context
 
 ### 8.3 AGENTS.md Integration
 
-Update brain's AGENTS.md to use skillforge:
+Update brain's AGENTS.md to use pulp:
 
 ```markdown
 ## Tools
 
-- skillforge: Extract web content for AI context
+- pulp: Extract web content for AI context
 - defuddle: Alternative web extraction
 ```
 
@@ -393,5 +393,5 @@ Open to contributions! Submit PRs, issues, and feature requests.
 
 ## 16. Contact
 
-- GitHub: github.com/Baseplayer23893/skillforge
-- Issues: github.com/Baseplayer23893/skillforge/issues
+- GitHub: github.com/Baseplayer23893/Pulp
+- Issues: github.com/Baseplayer23893/Pulp/issues

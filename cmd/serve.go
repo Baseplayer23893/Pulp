@@ -12,7 +12,7 @@ var servePort int
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "Start local SkillForge dashboard",
+	Short: "Start local Pulp dashboard",
 	Long: `Start a local web dashboard for browsing and managing extracted skills.
 The dashboard provides a visual interface for the CLI functionality.`,
 	RunE: runServe,
@@ -31,7 +31,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	mux.HandleFunc("/health", handleHealth)
 
 	addr := fmt.Sprintf(":%d", servePort)
-	fmt.Fprintf(os.Stderr, "🚀 SkillForge dashboard running at http://localhost%s\n", addr)
+	fmt.Fprintf(os.Stderr, "🍊 Pulp dashboard running at http://localhost%s\n", addr)
 	fmt.Fprintf(os.Stderr, "   Press Ctrl+C to stop\n")
 
 	return http.ListenAndServe(addr, mux)
@@ -60,7 +60,7 @@ func handleAPIExtract(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"status":"extracting","url":"%s","message":"Use CLI for extraction: skillforge extract %s"}`, url, url)
+	fmt.Fprintf(w, `{"status":"extracting","url":"%s","message":"Use CLI for extraction: pulp extract %s"}`, url, url)
 }
 
 const dashboardHTML = `<!DOCTYPE html>
@@ -68,7 +68,7 @@ const dashboardHTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SkillForge Dashboard</title>
+<title>Pulp Dashboard</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0a;color:#e0e0e0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
@@ -82,12 +82,12 @@ code{background:#1a1a2e;padding:0.3rem 0.6rem;border-radius:6px;font-size:0.9rem
 </head>
 <body>
 <div class="container">
-<h1>⚒ SkillForge</h1>
+<h1>🍊 Pulp</h1>
 <p>Extract clean markdown from web content</p>
 <div class="status">
 <span class="badge">● Running</span>
 <p style="margin-top:1rem">Dashboard is running. Use the CLI for extraction:</p>
-<p><code>skillforge extract &lt;url&gt;</code></p>
+<p><code>pulp extract &lt;url&gt;</code></p>
 </div>
 </div>
 </body>

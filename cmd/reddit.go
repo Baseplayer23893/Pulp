@@ -132,7 +132,7 @@ func runReddit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("User-Agent", "SkillForge/0.1 (CLI content extractor)")
+	req.Header.Set("User-Agent", "Pulp/0.2 (CLI content extractor)")
 
 	resp, err := client.Do(req)
 	if err != nil {

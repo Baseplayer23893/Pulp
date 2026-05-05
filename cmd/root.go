@@ -17,15 +17,15 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "skillforge",
-	Short: "SkillForge — extract clean markdown from web content",
-	Long: `SkillForge is an open-source tool that extracts clean markdown from web content
+	Use:   "pulp",
+	Short: "Pulp — squeeze the web into clean markdown",
+	Long: `Pulp is an open-source tool that extracts clean markdown from web content
 and packages it for AI workflows, custom agents, and local LLM pipelines.
 
 Supported sources: web pages, YouTube, Instagram, Reddit, PDFs.
 Uses defuddle under the hood for high-quality content extraction.
 
-Run 'skillforge tui' for the interactive terminal UI.`,
+Run 'pulp tui' for the interactive terminal UI.`,
 	Version: version,
 	CompletionOptions: cobra.CompletionOptions{
 		DisableDefaultCmd: true,
@@ -37,8 +37,8 @@ var tuiCmd = &cobra.Command{
 	Use:     "tui",
 	Aliases: []string{"ui", "menu"},
 	Short:   "Launch interactive terminal UI",
-	Long: `Launch the SkillForge interactive terminal UI.
-Select sources, enter URLs, preview results, and manage your skills
+	Long: `Launch the Pulp interactive terminal UI.
+Select sources, enter URLs, preview results, and manage your squeezes
 all from a beautiful terminal dashboard.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return tui.ShowMenu()
@@ -58,7 +58,7 @@ var dashboardCmd = &cobra.Command{
 // Config command
 var configCmd = &cobra.Command{
 	Use:   "config",
-	Short: "Show or modify SkillForge configuration",
+	Short: "Show or modify Pulp configuration",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := config.Load()
 		fmt.Printf("Config file:    %s\n", config.ConfigPath())
@@ -72,7 +72,7 @@ var configCmd = &cobra.Command{
 
 var configInitCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Create default config file at ~/.skillforge.yaml",
+	Short: "Create default config file at ~/.pulp.yaml",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := config.DefaultConfig()
 		if err := cfg.Save(); err != nil {
@@ -123,7 +123,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&formatFlag, "format", "f", cfg.DefaultFormat, "Output format: md, skillzip, single")
 	rootCmd.PersistentFlags().BoolVarP(&quietFlag, "quiet", "q", false, "Suppress verbose output")
 
-	rootCmd.SetVersionTemplate(fmt.Sprintf("SkillForge v%s\n", version))
+	rootCmd.SetVersionTemplate(fmt.Sprintf("Pulp v%s\n", version))
 
 	// Register TUI commands
 	rootCmd.AddCommand(tuiCmd)

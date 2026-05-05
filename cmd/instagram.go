@@ -182,7 +182,7 @@ func runInstagram(cmd *cobra.Command, args []string) error {
 
 // extractInstagramTranscript attempts to get audio transcription from IG Reels
 func extractInstagramTranscript(ytdlp string, url string) string {
-	tmpDir, err := os.MkdirTemp("", "skillforge-ig-*")
+	tmpDir, err := os.MkdirTemp("", "pulp-ig-*")
 	if err != nil {
 		return ""
 	}

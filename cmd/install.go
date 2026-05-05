@@ -12,9 +12,9 @@ import (
 
 var installCmd = &cobra.Command{
 	Use:   "install",
-	Short: "Install SkillForge CLI to PATH",
-	Long: `Build and install the skillforge binary to ~/.local/bin.
-This makes the 'skillforge' command available globally.`,
+	Short: "Install Pulp CLI to PATH",
+	Long: `Build and install the pulp binary to ~/.local/bin.
+This makes the 'pulp' command available globally.`,
 	RunE: runInstall,
 }
 
@@ -24,7 +24,7 @@ func init() {
 
 func runInstall(cmd *cobra.Command, args []string) error {
 	if runtime.GOOS == "windows" {
-		return fmt.Errorf("automatic install not supported on Windows — build manually with: go build -o skillforge.exe")
+		return fmt.Errorf("automatic install not supported on Windows — build manually with: go build -o pulp.exe")
 	}
 
 	home, err := os.UserHomeDir()
@@ -37,8 +37,8 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create %s: %w", binDir, err)
 	}
 
-	binPath := filepath.Join(binDir, "skillforge")
-	fmt.Fprintf(os.Stderr, "🔨 Building skillforge...\n")
+	binPath := filepath.Join(binDir, "pulp")
+	fmt.Fprintf(os.Stderr, "🔨 Building pulp...\n")
 
 	// Find the module root (where go.mod is)
 	modRoot, err := findModuleRoot()

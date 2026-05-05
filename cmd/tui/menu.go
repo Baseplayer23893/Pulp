@@ -664,7 +664,7 @@ func (m Model) viewHistory() string {
 
 	if len(entries) == 0 {
 		s.WriteString(lipgloss.NewStyle().Foreground(colorMuted).Padding(1, 3).Render(
-			"No squeezes yet. Run  skillforge extract <url>  to get started."))
+			"No squeezes yet. Run  pulp extract <url>  to get started."))
 	} else {
 		var listContent strings.Builder
 		maxShow := m.height - 10
@@ -798,7 +798,7 @@ func (m Model) startSqueeze() tea.Cmd {
 
 		exe, err := os.Executable()
 		if err != nil {
-			exe = "skillforge"
+			exe = "pulp"
 		}
 
 		cmd := exec.Command(exe, cmdName, m.squeezeURL, "-q")

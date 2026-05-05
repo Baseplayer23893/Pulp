@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config holds SkillForge configuration
+// Config holds Pulp configuration
 type Config struct {
 	// OutputDir is the default output directory for extracted content
 	OutputDir string `yaml:"output_dir"`
@@ -30,25 +30,25 @@ func DefaultConfig() *Config {
 	}
 }
 
-// ConfigDir returns the SkillForge config directory
+// ConfigDir returns the Pulp config directory
 func ConfigDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".skillforge"
+		return ".pulp"
 	}
-	return filepath.Join(home, ".config", "skillforge")
+	return filepath.Join(home, ".config", "pulp")
 }
 
 // ConfigPath returns the path to the config file
 func ConfigPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".skillforge.yaml"
+		return ".pulp.yaml"
 	}
-	return filepath.Join(home, ".skillforge.yaml")
+	return filepath.Join(home, ".pulp.yaml")
 }
 
-// Load reads config from ~/.skillforge.yaml
+// Load reads config from ~/.pulp.yaml
 // Falls back to defaults if file doesn't exist
 func Load() *Config {
 	cfg := DefaultConfig()
@@ -65,14 +65,14 @@ func Load() *Config {
 	return cfg
 }
 
-// Save writes the current config to ~/.skillforge.yaml
+// Save writes the current config to ~/.pulp.yaml
 func (c *Config) Save() error {
 	data, err := yaml.Marshal(c)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	header := []byte("# SkillForge Configuration\n# See: https://github.com/Baseplayer23893/skillforge\n\n")
+	header := []byte("# Pulp Configuration\n# See: https://github.com/Baseplayer23893/Pulp\n\n")
 	content := append(header, data...)
 
 	return os.WriteFile(ConfigPath(), content, 0644)

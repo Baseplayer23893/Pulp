@@ -17,8 +17,8 @@ var packageCmd = &cobra.Command{
 The archive contains SKILL.md with frontmatter and a references/ directory.
 
 Usage:
-  cat content.md | skillforge package my-skill
-  skillforge package my-skill -o ./output/`,
+  cat content.md | pulp package my-skill
+  pulp package my-skill -o ./output/`,
 	Args: cobra.ExactArgs(1),
 	RunE: runPackage,
 }
@@ -57,7 +57,7 @@ func runPackage(cmd *cobra.Command, args []string) error {
 			}
 			content = string(data)
 		} else {
-			return fmt.Errorf("no content provided — use --source or pipe:\n  skillforge package %s --source content.md\n  skillforge extract <url> | skillforge package %s", name, name)
+			return fmt.Errorf("no content provided — use --source or pipe:\n  pulp package %s --source content.md\n  pulp extract <url> | pulp package %s", name, name)
 		}
 	}
 

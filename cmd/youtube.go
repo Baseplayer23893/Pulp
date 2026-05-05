@@ -137,7 +137,7 @@ func runYoutube(cmd *cobra.Command, args []string) error {
 func extractTranscript(ytdlp string, url string) (string, error) {
 	// Try to get subtitles (manual first, then auto-generated)
 	// Write to temp dir
-	tmpDir, err := os.MkdirTemp("", "skillforge-yt-*")
+	tmpDir, err := os.MkdirTemp("", "pulp-yt-*")
 	if err != nil {
 		return "", err
 	}
