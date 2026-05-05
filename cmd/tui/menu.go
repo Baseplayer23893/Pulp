@@ -1,10 +1,14 @@
 package tui
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -59,6 +63,7 @@ type squeezeDoneMsg struct {
 	output string
 	err    error
 	dur    time.Duration
+	reqID  int
 }
 type squeezeProgressMsg float64
 
@@ -81,6 +86,9 @@ type Model struct {
 	squeezeErr     error
 	squeezeDur     time.Duration
 	squeezeURL     string
+	squeezeCancel  context.CancelFunc
+	squeezeReqID   int
+	activeReqID    int
 
 	// History
 	history *config.History
@@ -90,6 +98,11 @@ type Model struct {
 	settingsValues  [2]string // output_dir, format
 	settingsEditing bool
 	settingsInput   textinput.Model
+
+	// Transient status line (result screen)
+	statusMsg string
+	noticeMsg string
+	showHelp  bool
 }
 
 func initialModel() Model {
@@ -197,6 +210,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case squeezeDoneMsg:
+		if msg.reqID != m.activeReqID {
+			return m, nil
+		}
+		m.squeezeCancel = nil
 		m.squeezeOutput = msg.output
 		m.squeezeErr = msg.err
 		m.squeezeDur = msg.dur
@@ -256,11 +273,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
+	key := normalizeKey(msg.String())
 
 	// Global exits
 	if key == "ctrl+c" {
 		return m, tea.Quit
+	}
+	if key == "?" {
+		m.showHelp = !m.showHelp
+		return m, nil
 	}
 
 	switch m.state {
@@ -278,11 +299,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					// Auto-detect source and squeeze
 					m.squeezeURL = url
 					m.selectedSource = detectSource(url)
-					m.state = stateSqueezing
 					m.quickInput.SetValue("")
 					m.quickInput.Blur()
-					return m, tea.Batch(m.spinner.Tick, m.startSqueeze())
+					m.noticeMsg = ""
+					return m.beginSqueeze()
 				}
+				m.noticeMsg = "Enter a URL to start squeezing."
 				return m, nil
 			}
 			var cmd tea.Cmd
@@ -308,10 +330,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.history = config.LoadHistory()
 			m.state = stateHistory
 			m.cursor = 0 // reset so history always opens at top
+			m.noticeMsg = ""
 		case "s":
 			m.state = stateSettings
 			m.settingsCursor = 0
 			m.settingsEditing = false
+			m.noticeMsg = ""
 		case "enter":
 			return m.selectMenuItem()
 		}
@@ -322,14 +346,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "esc":
 			m.state = stateHome
 			m.urlInput.Blur()
+			m.noticeMsg = ""
 			return m, nil
 		case "enter":
 			url := strings.TrimSpace(m.urlInput.Value())
 			if url != "" {
 				m.squeezeURL = url
-				m.state = stateSqueezing
-				return m, tea.Batch(m.spinner.Tick, m.startSqueeze())
+				m.noticeMsg = ""
+				return m.beginSqueeze()
 			}
+			m.noticeMsg = "URL is required."
 			return m, nil
 		}
 		var cmd tea.Cmd
@@ -338,8 +364,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// ════ SQUEEZING ════
 	case stateSqueezing:
-		if key == "esc" || key == "ctrl+c" {
+		if key == "esc" {
+			if m.squeezeCancel != nil {
+				m.squeezeCancel()
+				m.squeezeCancel = nil
+			}
 			m.state = stateHome
+			m.noticeMsg = "Squeeze canceled."
 			return m, nil
 		}
 
@@ -348,33 +379,46 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "esc", "q":
 			m.state = stateHome
+			m.statusMsg = ""
+			m.noticeMsg = ""
+			return m, nil
 		case "r":
 			// Re-squeeze
-			m.state = stateSqueezing
-			return m, tea.Batch(m.spinner.Tick, m.startSqueeze())
-		case "s":
-			// Save output to a file in the configured output dir
-			if m.squeezeOutput != "" {
-				cfg := config.Load()
-				outDir := cfg.OutputDir
-				if outDir == "" || outDir == "." {
-					outDir, _ = os.Getwd()
-				}
-				// Derive a filename from the URL slug
-				slug := filepath.Base(strings.TrimRight(m.squeezeURL, "/"))
-				if slug == "." || slug == "" {
-					slug = "output"
-				}
-				out := filepath.Join(outDir, slug+".md")
-				os.MkdirAll(outDir, 0755)
-				os.WriteFile(out, []byte(m.squeezeOutput), 0644)
+			m.statusMsg = ""
+			return m.beginSqueeze()
+		case "s", "ctrl+s":
+			if m.squeezeOutput == "" {
+				m.statusMsg = "⚠  Nothing to save"
+				return m, nil
 			}
-		case "c":
-			// Copy output to system clipboard
-			if m.squeezeOutput != "" {
-				clipboard.WriteAll(m.squeezeOutput)
+			outDir := config.ResolveOutputDir("")
+			if outDir == "" || outDir == "." {
+				outDir, _ = os.Getwd()
 			}
+			out := filepath.Join(outDir, outputSlugFromInput(m.squeezeURL)+".md")
+			if err := os.MkdirAll(outDir, 0755); err != nil {
+				m.statusMsg = fmt.Sprintf("✗  Could not create dir: %s", err)
+				return m, nil
+			}
+			if err := os.WriteFile(out, []byte(m.squeezeOutput), 0644); err != nil {
+				m.statusMsg = fmt.Sprintf("✗  Save failed: %s", err)
+			} else {
+				m.statusMsg = fmt.Sprintf("✓  Saved → %s", out)
+			}
+			return m, nil
+		case "c", "y":
+			if m.squeezeOutput == "" {
+				m.statusMsg = "⚠  Nothing to copy"
+				return m, nil
+			}
+			if err := clipboard.WriteAll(m.squeezeOutput); err != nil {
+				m.statusMsg = fmt.Sprintf("✗  Clipboard failed: %s", err)
+			} else {
+				m.statusMsg = "✓  Copied to clipboard"
+			}
+			return m, nil
 		}
+		// Scroll keys fall through to the viewport
 		var cmd tea.Cmd
 		m.viewport, cmd = m.viewport.Update(msg)
 		return m, cmd
@@ -396,6 +440,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "esc", "q":
 			m.state = stateHome
+			m.noticeMsg = ""
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
@@ -427,8 +472,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						break
 					}
 				}
-				m.state = stateSqueezing
-				return m, tea.Batch(m.spinner.Tick, m.startSqueeze())
+				m.noticeMsg = ""
+				return m.beginSqueeze()
 			}
 		}
 
@@ -462,13 +507,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "esc":
 			m.state = stateHome
-		case "s":
+			m.noticeMsg = ""
+		case "s", "ctrl+s":
 			// Save current in-memory values and exit
 			cfg := config.Load()
 			cfg.OutputDir = m.settingsValues[0]
 			cfg.DefaultFormat = m.settingsValues[1]
 			cfg.Save() // writes to ~/.config/pulp/config.json
 			m.state = stateHome
+			m.noticeMsg = "Settings saved."
 		case "enter":
 			// Open the current field for editing
 			m.settingsInput.SetValue(m.settingsValues[m.settingsCursor])
@@ -511,24 +558,41 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) selectMenuItem() (tea.Model, tea.Cmd) {
 	switch m.cursor {
 	case 5: // Package — just go back for now
+		m.noticeMsg = "Package skill is not wired in the TUI yet."
 		return m, nil
 	case 6: // History
 		m.history = config.LoadHistory()
 		m.state = stateHistory
 		m.cursor = 0
+		m.noticeMsg = ""
 		return m, nil
 	case 7: // Settings
 		m.state = stateSettings
 		m.settingsCursor = 0
 		m.settingsEditing = false
+		m.noticeMsg = ""
 		return m, nil
 	default: // Sources (0-4)
 		m.selectedSource = m.cursor
 		m.state = stateExtractInput
 		m.urlInput.SetValue("")
 		m.urlInput.Focus()
+		m.noticeMsg = ""
 		return m, textinput.Blink
 	}
+}
+
+func (m Model) beginSqueeze() (tea.Model, tea.Cmd) {
+	if m.squeezeCancel != nil {
+		m.squeezeCancel()
+	}
+	m.squeezeReqID++
+	m.activeReqID = m.squeezeReqID
+	ctx, cancel := context.WithCancel(context.Background())
+	m.squeezeCancel = cancel
+	m.state = stateSqueezing
+	m.statusMsg = ""
+	return m, tea.Batch(m.spinner.Tick, m.startSqueeze(ctx, m.activeReqID))
 }
 
 // ── View ──
@@ -540,17 +604,17 @@ func (m Model) View() string {
 
 	switch m.state {
 	case stateHome:
-		return m.viewHome()
+		return m.withHelp(m.viewHome())
 	case stateExtractInput:
-		return m.viewExtractInput()
+		return m.withHelp(m.viewExtractInput())
 	case stateSqueezing:
-		return m.viewSqueezing()
+		return m.withHelp(m.viewSqueezing())
 	case stateResult:
-		return m.viewResult()
+		return m.withHelp(m.viewResult())
 	case stateHistory:
-		return m.viewHistory()
+		return m.withHelp(m.viewHistory())
 	case stateSettings:
-		return m.viewSettings()
+		return m.withHelp(m.viewSettings())
 	}
 	return ""
 }
@@ -605,11 +669,18 @@ func (m Model) viewHome() string {
 	quickPanel := panelStyle.Width(w - 4).Render(quickContent)
 	s.WriteString(quickPanel)
 	s.WriteString("\n\n")
+	if m.noticeMsg != "" {
+		s.WriteString("  " + lipgloss.NewStyle().Foreground(colorAmber).Bold(true).Render("⚠ "+m.noticeMsg))
+		s.WriteString("\n\n")
+	}
 
 	// Key hints
 	hints := keyHint("↑↓", "Navigate") + "   " +
 		keyHint("Enter", "Select") + "   " +
+		keyHint("s", "Settings") + "   " +
+		keyHint("h", "History") + "   " +
 		keyHint("/", "Quick squeeze") + "   " +
+		keyHint("?", "Help") + "   " +
 		keyHint("q", "Quit")
 	s.WriteString("  " + hints)
 
@@ -640,6 +711,10 @@ func (m Model) viewExtractInput() string {
 	s.WriteString("  " + lipgloss.NewStyle().Bold(true).Foreground(colorOrange).Render("Enter URL") + "\n")
 	s.WriteString(urlPanel)
 	s.WriteString("\n\n")
+	if m.noticeMsg != "" {
+		s.WriteString("  " + lipgloss.NewStyle().Foreground(colorAmber).Bold(true).Render("⚠ "+m.noticeMsg))
+		s.WriteString("\n\n")
+	}
 
 	// Platform detection
 	url := m.urlInput.Value()
@@ -663,7 +738,7 @@ func (m Model) viewExtractInput() string {
 	s.WriteString("\n\n")
 
 	// Hints
-	hints := keyHint("Enter", "Squeeze") + "   " + keyHint("ESC", "Back")
+	hints := keyHint("Enter", "Squeeze") + "   " + keyHint("ESC", "Back") + "   " + keyHint("?", "Help")
 	s.WriteString("  " + hints)
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, s.String())
@@ -703,7 +778,7 @@ func (m Model) viewSqueezing() string {
 	s.WriteString(logPanel)
 	s.WriteString("\n\n")
 
-	hints := keyHint("Ctrl+C", "Cancel")
+	hints := keyHint("ESC", "Cancel squeeze") + "   " + keyHint("?", "Help")
 	s.WriteString("  " + hints)
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, s.String())
@@ -736,6 +811,15 @@ func (m Model) viewResult() string {
 			Render("  " + m.squeezeErr.Error())
 		s.WriteString(errBox)
 	} else {
+		outDir := config.ResolveOutputDir("")
+		if outDir == "" || outDir == "." {
+			wd, _ := os.Getwd()
+			outDir = wd
+		}
+		saveHint := lipgloss.NewStyle().Foreground(colorMuted).Render(fmt.Sprintf("  Save target: %s", filepath.Join(outDir, outputSlugFromInput(m.squeezeURL)+".md")))
+		s.WriteString(saveHint)
+		s.WriteString("\n\n")
+
 		// Preview
 		words := len(strings.Fields(m.squeezeOutput))
 		lines := len(strings.Split(m.squeezeOutput, "\n"))
@@ -764,10 +848,22 @@ func (m Model) viewResult() string {
 
 	s.WriteString("\n\n")
 
+	// Status message (save / copy feedback)
+	if m.statusMsg != "" {
+		var statusStyle lipgloss.Style
+		if strings.HasPrefix(m.statusMsg, "✓") {
+			statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")).Bold(true)
+		} else {
+			statusStyle = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
+		}
+		s.WriteString("  " + statusStyle.Render(m.statusMsg) + "\n")
+	}
+
 	// Actions
-	actionContent := keyHint("S", "Save") + "   " +
-		keyHint("C", "Copy") + "   " +
+	actionContent := keyHint("S/Ctrl+S", "Save") + "   " +
+		keyHint("C/Y", "Copy") + "   " +
 		keyHint("R", "Re-squeeze") + "   " +
+		keyHint("?", "Help") + "   " +
 		keyHint("ESC", "Back")
 	s.WriteString("  " + actionContent)
 
@@ -798,7 +894,7 @@ func (m Model) viewHistory() string {
 
 	if len(entries) == 0 {
 		s.WriteString(lipgloss.NewStyle().Foreground(colorMuted).Padding(1, 3).Render(
-			"No squeezes yet. Run  pulp extract <url>  to get started."))
+			"No squeezes yet. Press ESC to return and start your first squeeze."))
 	} else {
 		var listContent strings.Builder
 		maxShow := m.height - 10
@@ -847,9 +943,14 @@ func (m Model) viewHistory() string {
 	}
 
 	s.WriteString("\n\n")
+	if m.noticeMsg != "" {
+		s.WriteString("  " + lipgloss.NewStyle().Foreground(colorAmber).Bold(true).Render("⚠ "+m.noticeMsg))
+		s.WriteString("\n\n")
+	}
 	hints := keyHint("↑↓", "Navigate") + "   " +
 		keyHint("D", "Delete") + "   " +
 		keyHint("R", "Re-squeeze") + "   " +
+		keyHint("?", "Help") + "   " +
 		keyHint("ESC", "Back")
 	s.WriteString("  " + hints)
 
@@ -936,6 +1037,10 @@ func (m Model) viewSettings() string {
 	s.WriteString("  " + lipgloss.NewStyle().Bold(true).Foreground(colorOrange).Render("Tools") + "\n")
 	s.WriteString(toolPanel)
 	s.WriteString("\n\n")
+	if m.noticeMsg != "" {
+		s.WriteString("  " + lipgloss.NewStyle().Foreground(colorEmerald).Bold(true).Render("✓ "+m.noticeMsg))
+		s.WriteString("\n\n")
+	}
 
 	var hints string
 	if m.settingsEditing {
@@ -945,6 +1050,7 @@ func (m Model) viewSettings() string {
 			keyHint("Enter", "Edit") + "   " +
 			keyHint("←→", "Cycle format") + "   " +
 			keyHint("S", "Save & exit") + "   " +
+			keyHint("?", "Help") + "   " +
 			keyHint("ESC", "Cancel")
 	}
 	s.WriteString("  " + hints)
@@ -954,7 +1060,7 @@ func (m Model) viewSettings() string {
 
 // ── Squeeze command ──
 
-func (m Model) startSqueeze() tea.Cmd {
+func (m Model) startSqueeze(ctx context.Context, reqID int) tea.Cmd {
 	return func() tea.Msg {
 		cmdName := menuItems[m.selectedSource].cmd
 		start := time.Now()
@@ -964,22 +1070,58 @@ func (m Model) startSqueeze() tea.Cmd {
 			exe = "pulp"
 		}
 
-		cmd := exec.Command(exe, cmdName, m.squeezeURL, "-q")
+		cmd := exec.CommandContext(ctx, exe, cmdName, m.squeezeURL, "-q")
 		out, err := cmd.CombinedOutput()
 		dur := time.Since(start)
 
 		if err != nil {
+			if errors.Is(ctx.Err(), context.Canceled) {
+				return squeezeDoneMsg{
+					output: "",
+					err:    fmt.Errorf("squeeze canceled"),
+					dur:    dur,
+					reqID:  reqID,
+				}
+			}
 			return squeezeDoneMsg{
 				output: "",
 				err:    fmt.Errorf("%s", strings.TrimSpace(string(out))),
 				dur:    dur,
+				reqID:  reqID,
 			}
 		}
 		return squeezeDoneMsg{
 			output: string(out),
 			dur:    dur,
+			reqID:  reqID,
 		}
 	}
+}
+
+func (m Model) withHelp(base string) string {
+	if !m.showHelp {
+		return base
+	}
+	help := panelStyle.Width(58).Render(
+		"Help\n\n" +
+			"Global:\n" +
+			"  ?         Toggle this help\n" +
+			"  q         Quit (home/result/history)\n" +
+			"  Ctrl+C    Force quit\n\n" +
+			"Common:\n" +
+			"  ↑/↓, j/k  Move selection\n" +
+			"  Enter     Confirm/select\n" +
+			"  Esc       Go back/cancel\n\n" +
+			"Tips:\n" +
+			"  /         Quick squeeze from home\n" +
+			"  s         Save in result/settings\n" +
+			"  r         Re-run last squeeze")
+	overlay := lipgloss.NewStyle().
+		Background(colorSurface).
+		Foreground(colorBright).
+		Padding(1, 2).
+		Render(help)
+	return lipgloss.JoinVertical(lipgloss.Left, base, "\n", lipgloss.PlaceHorizontal(m.width, lipgloss.Center, overlay))
 }
 
 // ── Helpers ──
@@ -1037,4 +1179,42 @@ func relTime(ts string) string {
 	default:
 		return t.Format("Jan 02")
 	}
+}
+
+func normalizeKey(key string) string {
+	if len(key) == 1 {
+		return strings.ToLower(key)
+	}
+	return key
+}
+
+func outputSlugFromInput(raw string) string {
+	candidate := strings.TrimSpace(raw)
+	if candidate == "" {
+		return "output"
+	}
+
+	if parsed, err := url.Parse(candidate); err == nil && parsed.Host != "" {
+		p := strings.Trim(parsed.Path, "/")
+		if p != "" {
+			last := filepath.Base(p)
+			last = strings.Split(last, "?")[0]
+			last = strings.Split(last, "#")[0]
+			if last != "" && last != "." && last != "/" {
+				candidate = last
+			} else {
+				candidate = parsed.Host
+			}
+		} else {
+			candidate = parsed.Host
+		}
+	}
+
+	re := regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+	candidate = re.ReplaceAllString(candidate, "-")
+	candidate = strings.Trim(candidate, "-._")
+	if candidate == "" {
+		return "output"
+	}
+	return candidate
 }
