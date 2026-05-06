@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Config holds Pulp configuration
@@ -94,13 +95,33 @@ func (c *Config) Save() error {
 // CLI flag > config > current directory
 func ResolveOutputDir(cliFlag string) string {
 	if cliFlag != "" {
-		return cliFlag
+		return NormalizeOutputDir(cliFlag)
 	}
 
 	cfg := Load()
 	if cfg.OutputDir != "" && cfg.OutputDir != "." {
-		return cfg.OutputDir
+		return NormalizeOutputDir(cfg.OutputDir)
 	}
 
 	return "."
+}
+
+// NormalizeOutputDir expands shell-style home and environment references in an
+// output directory while preserving "." as the default current-directory value.
+func NormalizeOutputDir(dir string) string {
+	dir = os.ExpandEnv(strings.TrimSpace(dir))
+	if dir == "" || dir == "." {
+		return dir
+	}
+	if dir == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			return home
+		}
+	}
+	if strings.HasPrefix(dir, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, strings.TrimPrefix(dir, "~/"))
+		}
+	}
+	return filepath.Clean(dir)
 }

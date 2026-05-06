@@ -23,6 +23,8 @@ import (
 	"github.com/Baseplayer23893/Pulp/internal/config"
 )
 
+var writeClipboard = clipboard.WriteAll
+
 // ── State machine ──
 
 type state int
@@ -393,16 +395,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.statusMsg = "⚠  Nothing to save"
 				return m, nil
 			}
-			outDir := config.ResolveOutputDir("")
-			if outDir == "" || outDir == "." {
-				outDir, _ = os.Getwd()
-			}
-			out := filepath.Join(outDir, outputSlugFromInput(m.squeezeURL)+".md")
-			if err := os.MkdirAll(outDir, 0755); err != nil {
-				m.statusMsg = fmt.Sprintf("✗  Could not create dir: %s", err)
-				return m, nil
-			}
-			if err := os.WriteFile(out, []byte(m.squeezeOutput), 0644); err != nil {
+			out, err := saveResultOutput(m.squeezeURL, m.squeezeOutput)
+			if err != nil {
 				m.statusMsg = fmt.Sprintf("✗  Save failed: %s", err)
 			} else {
 				m.statusMsg = fmt.Sprintf("✓  Saved → %s", out)
@@ -413,10 +407,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.statusMsg = "⚠  Nothing to copy"
 				return m, nil
 			}
-			if err := clipboard.WriteAll(m.squeezeOutput); err != nil {
+			msg, err := copyResultOutput(m.squeezeOutput)
+			if err != nil {
 				m.statusMsg = fmt.Sprintf("✗  Clipboard failed: %s", err)
 			} else {
-				m.statusMsg = "✓  Copied to clipboard"
+				m.statusMsg = msg
 			}
 			return m, nil
 		}
@@ -512,10 +507,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.noticeMsg = ""
 		case "s", "ctrl+s":
 			// Save current in-memory values and exit
+			format := strings.TrimSpace(m.settingsValues[1])
+			if format != "md" && format != "skillzip" && format != "single" {
+				m.noticeMsg = "Invalid default format. Use md, skillzip, or single."
+				return m, nil
+			}
 			cfg := config.Load()
-			cfg.OutputDir = m.settingsValues[0]
-			cfg.DefaultFormat = m.settingsValues[1]
-			cfg.Save() // writes to ~/.config/pulp/config.json
+			cfg.OutputDir = config.NormalizeOutputDir(m.settingsValues[0])
+			if cfg.OutputDir != "" && cfg.OutputDir != "." {
+				if err := os.MkdirAll(cfg.OutputDir, 0755); err != nil {
+					m.noticeMsg = "Failed to create output directory: " + err.Error()
+					return m, nil
+				}
+			}
+			cfg.DefaultFormat = format
+			if err := cfg.Save(); err != nil { // writes to ~/.config/pulp/config.json
+				m.noticeMsg = "Failed to save settings: " + err.Error()
+				return m, nil
+			}
 			m.state = stateHome
 			m.noticeMsg = "Settings saved."
 		case "enter":
@@ -555,6 +564,53 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func saveResultOutput(source string, content string) (string, error) {
+	outDir := config.ResolveOutputDir("")
+	if outDir == "" || outDir == "." {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		outDir = wd
+	}
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		return "", fmt.Errorf("create output directory %s: %w", outDir, err)
+	}
+	out := filepath.Join(outDir, outputSlugFromInput(source)+".md")
+	if err := os.WriteFile(out, []byte(content), 0644); err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+func copyResultOutput(content string) (string, error) {
+	if err := writeClipboard(content); err == nil {
+		return "✓  Copied to clipboard", nil
+	}
+
+	fallback, err := writeCopyFallback(content)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("⚠  Clipboard unavailable; saved copy → %s", fallback), nil
+}
+
+func writeCopyFallback(content string) (string, error) {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		base = os.TempDir()
+	}
+	dir := filepath.Join(base, "pulp")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, "last-copy.md")
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 func (m Model) selectMenuItem() (tea.Model, tea.Cmd) {
@@ -855,6 +911,8 @@ func (m Model) viewResult() string {
 		var statusStyle lipgloss.Style
 		if strings.HasPrefix(m.statusMsg, "✓") {
 			statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")).Bold(true)
+		} else if strings.HasPrefix(m.statusMsg, "⚠") {
+			statusStyle = lipgloss.NewStyle().Foreground(colorAmber).Bold(true)
 		} else {
 			statusStyle = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
 		}
@@ -1040,7 +1098,13 @@ func (m Model) viewSettings() string {
 	s.WriteString(toolPanel)
 	s.WriteString("\n\n")
 	if m.noticeMsg != "" {
-		s.WriteString("  " + lipgloss.NewStyle().Foreground(colorEmerald).Bold(true).Render("✓ "+m.noticeMsg))
+		noticeStyle := lipgloss.NewStyle().Foreground(colorEmerald).Bold(true)
+		prefix := "✓ "
+		if strings.HasPrefix(m.noticeMsg, "Failed") || strings.HasPrefix(m.noticeMsg, "Invalid") {
+			noticeStyle = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
+			prefix = "⚠ "
+		}
+		s.WriteString("  " + noticeStyle.Render(prefix+m.noticeMsg))
 		s.WriteString("\n\n")
 	}
 
