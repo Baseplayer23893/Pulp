@@ -180,7 +180,7 @@ func parseVTT(vtt string) string {
 	seen := make(map[string]bool)
 
 	// VTT format: timestamp lines followed by text lines
-	timestampRegex := regexp.MustCompile(`^\d{2}:\d{2}:\d{2}\.\d{3}\s*-->`)
+	timestampRegex := regexp.MustCompile(`^(?:\d{2}:)?\d{2}:\d{2}[.,]\d{3}\s*-->`)
 	cueIDRegex := regexp.MustCompile(`^\d+$`)
 	tagRegex := regexp.MustCompile(`<[^>]+>`)
 

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/Baseplayer23893/Pulp/cmd/tui"
 	"github.com/Baseplayer23893/Pulp/internal/config"
@@ -25,7 +26,14 @@ and packages it for AI workflows, custom agents, and local LLM pipelines.
 Supported sources: web pages, YouTube, Instagram, Reddit, PDFs.
 Uses defuddle under the hood for high-quality content extraction.
 
-Run 'pulp tui' for the interactive terminal UI.`,
+	Run 'pulp tui' for the interactive terminal UI.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Launch TUI only for interactive terminals; otherwise print help.
+		if isInteractiveTerminal() {
+			return tui.ShowMenu()
+		}
+		return cmd.Help()
+	},
 	Version: version,
 	CompletionOptions: cobra.CompletionOptions{
 		DisableDefaultCmd: true,
@@ -113,6 +121,15 @@ var configSetCmd = &cobra.Command{
 
 func Execute() error {
 	return rootCmd.Execute()
+}
+
+func isInteractiveTerminal() bool {
+	in, err := os.Stdin.Stat()
+	if err != nil || (in.Mode()&os.ModeCharDevice) == 0 {
+		return false
+	}
+	out, err := os.Stdout.Stat()
+	return err == nil && (out.Mode()&os.ModeCharDevice) != 0
 }
 
 func init() {

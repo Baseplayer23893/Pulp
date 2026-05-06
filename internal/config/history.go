@@ -92,6 +92,16 @@ func (h *History) Recent(n int) []HistoryEntry {
 	return recent
 }
 
+// All returns a copy of all history entries (newest first).
+func (h *History) All() []HistoryEntry {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	entries := make([]HistoryEntry, len(h.Entries))
+	copy(entries, h.Entries)
+	return entries
+}
+
 // Stats returns summary statistics.
 func (h *History) Stats() (total int, bySource map[string]int, totalWords int) {
 	h.mu.Lock()

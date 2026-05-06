@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -103,8 +104,13 @@ func TestCopyFallbackWritesCacheFileWhenClipboardUnavailable(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
 
 	origWriteClipboard := writeClipboard
+	origReadClipboard := readClipboard
 	writeClipboard = func(string) error { return errors.New("clipboard unavailable") }
-	t.Cleanup(func() { writeClipboard = origWriteClipboard })
+	readClipboard = func() (string, error) { return "", errors.New("clipboard unavailable") }
+	t.Cleanup(func() {
+		writeClipboard = origWriteClipboard
+		readClipboard = origReadClipboard
+	})
 
 	msg, err := copyResultOutput("hello world")
 	if err != nil {
@@ -123,6 +129,48 @@ func TestCopyFallbackWritesCacheFileWhenClipboardUnavailable(t *testing.T) {
 	}
 }
 
+func TestCopyFallbackWhenClipboardDoesNotRetainContent(t *testing.T) {
+	cacheHome := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheHome)
+
+	origWriteClipboard := writeClipboard
+	origReadClipboard := readClipboard
+	writeClipboard = func(string) error { return nil }
+	readClipboard = func() (string, error) { return "", errors.New("nothing copied") }
+	t.Cleanup(func() {
+		writeClipboard = origWriteClipboard
+		readClipboard = origReadClipboard
+	})
+
+	msg, err := copyResultOutput("hello arch")
+	if err != nil {
+		t.Fatalf("copyResultOutput returned error: %v", err)
+	}
+	want := filepath.Join(cacheHome, "pulp", "last-copy.md")
+	if !strings.Contains(msg, want) {
+		t.Fatalf("expected fallback path in status %q", msg)
+	}
+}
+
+func TestCopySuccessWhenClipboardDropsTrailingNewline(t *testing.T) {
+	origWriteClipboard := writeClipboard
+	origReadClipboard := readClipboard
+	writeClipboard = func(string) error { return nil }
+	readClipboard = func() (string, error) { return "hello world", nil }
+	t.Cleanup(func() {
+		writeClipboard = origWriteClipboard
+		readClipboard = origReadClipboard
+	})
+
+	msg, err := copyResultOutput("hello world\n")
+	if err != nil {
+		t.Fatalf("copyResultOutput returned error: %v", err)
+	}
+	if !strings.Contains(msg, "Copied to clipboard") {
+		t.Fatalf("expected clipboard success message, got %q", msg)
+	}
+}
+
 func TestResultCopyUppercaseKeyShowsFeedback(t *testing.T) {
 	m := initialModel()
 	m.state = stateResult
@@ -133,4 +181,52 @@ func TestResultCopyUppercaseKeyShowsFeedback(t *testing.T) {
 	if !strings.Contains(got.statusMsg, "Nothing to copy") {
 		t.Fatalf("expected copy warning, got %q", got.statusMsg)
 	}
+}
+
+func TestHistoryNavigationMovesBeyondVisibleWindow(t *testing.T) {
+	m := initialModel()
+	m.state = stateHistory
+	m.height = 12 // maxShow = 2 entries
+	m.history = &config.History{Entries: make([]config.HistoryEntry, 20)}
+	for i := range m.history.Entries {
+		m.history.Entries[i] = config.HistoryEntry{Title: "entry-" + string(rune('A'+i))}
+	}
+
+	for i := 0; i < 10; i++ {
+		next, _ := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		m = next.(Model)
+	}
+
+	if m.cursor != 10 {
+		t.Fatalf("expected cursor at absolute index 10, got %d", m.cursor)
+	}
+}
+
+func TestHistoryViewShowsWindowAroundCursor(t *testing.T) {
+	m := initialModel()
+	m.state = stateHistory
+	m.height = 14 // maxShow = 4 entries
+	m.cursor = 8
+	m.history = &config.History{Entries: make([]config.HistoryEntry, 12)}
+	for i := range m.history.Entries {
+		m.history.Entries[i] = config.HistoryEntry{
+			Title: "entry-" + twoDigits(i),
+			URL:   "https://example.com/item-" + strconv.Itoa(i),
+		}
+	}
+
+	view := m.viewHistory()
+	if !strings.Contains(view, "entry-08") {
+		t.Fatalf("expected selected window to contain cursor item, view=%q", view)
+	}
+	if strings.Contains(view, "entry-00") {
+		t.Fatalf("expected window to scroll away from first entries, view=%q", view)
+	}
+}
+
+func twoDigits(n int) string {
+	if n < 10 {
+		return "0" + strconv.Itoa(n)
+	}
+	return strconv.Itoa(n)
 }

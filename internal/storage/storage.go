@@ -36,6 +36,9 @@ func CreateSkillZip(name string, content string, references []string, outputDir 
 	if outputDir == "" {
 		outputDir = "."
 	}
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create output directory %s: %w", outputDir, err)
+	}
 
 	// Sanitize name for filesystem
 	safeName := sanitizeName(name)

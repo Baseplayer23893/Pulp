@@ -90,14 +90,15 @@ type RedditReplies struct {
 
 func (r *RedditReplies) UnmarshalJSON(data []byte) error {
 	// Reddit returns "" when there are no replies, or an object when there are
-	if len(data) == 0 || string(data) == `""` || string(data) == `null` {
+	raw := strings.TrimSpace(string(data))
+	if raw == "" || raw == `""` || raw == `null` {
 		return nil
 	}
 	// Try to unmarshal as a listing object
 	type Alias RedditReplies
 	var alias Alias
 	if err := json.Unmarshal(data, &alias); err != nil {
-		return nil // Silently ignore — it's just an empty string
+		return fmt.Errorf("invalid replies payload: %w", err)
 	}
 	r.Data = alias.Data
 	return nil

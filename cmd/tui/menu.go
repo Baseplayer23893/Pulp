@@ -23,7 +23,10 @@ import (
 	"github.com/Baseplayer23893/Pulp/internal/config"
 )
 
-var writeClipboard = clipboard.WriteAll
+var (
+	writeClipboard = clipboard.WriteAll
+	readClipboard  = clipboard.ReadAll
+)
 
 // ── State machine ──
 
@@ -422,18 +425,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// ════ HISTORY ════
 	case stateHistory:
-		// maxShow mirrors the view's calculation so cursor never goes invisible
-		maxVisible := func() int {
-			entries := m.history.Recent(30)
-			n := m.height - 10
-			if n > len(entries) {
-				n = len(entries)
-			}
-			if n < 1 {
-				n = 1
-			}
-			return n
-		}
+		entries := m.history.All()
 		switch key {
 		case "esc", "q":
 			m.state = stateHome
@@ -443,22 +435,23 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.cursor--
 			}
 		case "down", "j":
-			if m.cursor < maxVisible()-1 {
+			if len(entries) > 0 && m.cursor < len(entries)-1 {
 				m.cursor++
 			}
 		case "d":
-			if mv := maxVisible(); mv > 0 && m.cursor < mv {
+			if len(entries) > 0 && m.cursor < len(entries) {
 				// Delete persists immediately to history.json
-				m.history.Delete(m.cursor)
+				if err := m.history.Delete(m.cursor); err != nil {
+					m.noticeMsg = "Failed to delete history entry: " + err.Error()
+					return m, nil
+				}
 				// Clamp cursor so it stays in bounds after removal
-				newMax := maxVisible()
-				if m.cursor > 0 && m.cursor >= newMax {
+				if m.cursor > 0 && m.cursor >= len(entries)-1 {
 					m.cursor--
 				}
 			}
 		case "r":
 			// Re-squeeze the selected history entry
-			entries := m.history.Recent(30)
 			if len(entries) > 0 && m.cursor < len(entries) {
 				e := entries[m.cursor]
 				m.squeezeURL = e.URL
@@ -586,7 +579,7 @@ func saveResultOutput(source string, content string) (string, error) {
 }
 
 func copyResultOutput(content string) (string, error) {
-	if err := writeClipboard(content); err == nil {
+	if err := writeClipboard(content); err == nil && clipboardContains(content) {
 		return "✓  Copied to clipboard", nil
 	}
 
@@ -595,6 +588,15 @@ func copyResultOutput(content string) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("⚠  Clipboard unavailable; saved copy → %s", fallback), nil
+}
+
+func clipboardContains(content string) bool {
+	got, err := readClipboard()
+	return err == nil && normalizeClipboardContent(got) == normalizeClipboardContent(content)
+}
+
+func normalizeClipboardContent(content string) string {
+	return strings.TrimRight(content, "\r\n")
 }
 
 func writeCopyFallback(content string) (string, error) {
@@ -938,12 +940,11 @@ func (m Model) viewHistory() string {
 		w = 76
 	}
 
-	entries := m.history.Recent(30)
+	entries := m.history.All()
 
 	var s strings.Builder
 
-	// Total reflects all entries, not just the visible cap of 30
-	total := len(m.history.Entries)
+	total := len(entries)
 	header := headerStyle(w).Render(fmt.Sprintf("  pulp  ›  history                              %d squeezes", total))
 	s.WriteString(header)
 	s.WriteString("\n\n")
@@ -965,7 +966,18 @@ func (m Model) viewHistory() string {
 			maxShow = 1
 		}
 
-		for i := 0; i < maxShow; i++ {
+		start := 0
+		if m.cursor >= maxShow {
+			start = m.cursor - maxShow + 1
+		}
+		if start > len(entries)-maxShow {
+			start = len(entries) - maxShow
+		}
+		if start < 0 {
+			start = 0
+		}
+
+		for i := start; i < start+maxShow; i++ {
 			e := entries[i]
 			icon := icons[e.Source]
 			if icon == "" {

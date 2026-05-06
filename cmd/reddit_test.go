@@ -112,6 +112,7 @@ func TestRedditRepliesUnmarshal(t *testing.T) {
 		name      string
 		input     string
 		wantEmpty bool
+		wantErr   bool
 	}{
 		{
 			name:      "empty string replies",
@@ -128,12 +129,23 @@ func TestRedditRepliesUnmarshal(t *testing.T) {
 			input:     `{"kind":"Listing","data":{"children":[{"kind":"t1","data":{"body":"hello","author":"testuser","score":5}}]}}`,
 			wantEmpty: false,
 		},
+		{
+			name:    "malformed replies object returns error",
+			input:   `{"kind":"Listing","data":{"children":[`,
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var replies RedditReplies
 			err := json.Unmarshal([]byte(tt.input), &replies)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected unmarshal error, got nil")
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("Unmarshal failed: %v", err)
 			}
