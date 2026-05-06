@@ -73,7 +73,12 @@ sudo mv pulp /usr/local/bin/
 **Dependencies:**
 ```bash
 npm install -g defuddle   # web extraction
-pip install yt-dlp        # YouTube transcripts
+pipx install yt-dlp       # YouTube / Instagram metadata and transcripts
+```
+
+Check your machine:
+```bash
+pulp doctor
 ```
 
 ---
@@ -88,9 +93,25 @@ pulp reddit <url>             # Reddit post + comments
 pulp instagram <url>          # Instagram Reel
 pulp pdf <file>               # extract PDF
 pulp package <name>           # create skill.zip
+pulp doctor                   # check dependencies and local setup
 ```
 
 **Quick squeeze any URL straight from the TUI** — just paste and hit Enter.
+
+## v0.4 Scope
+
+The supported launch surface is the CLI/TUI core:
+
+- Web, YouTube, Reddit, Instagram, and PDF extraction
+- Save, copy/fallback, settings, and history in the TUI
+- `skill.zip` packaging
+- `pulp doctor` setup checks
+
+Experimental or future work:
+
+- Web dashboard/API
+- MCP integration
+- Cloud sync
 
 ---
 
@@ -123,8 +144,9 @@ Drop it in your skills directory and your AI has the context.
 - [x] PDF extraction
 - [x] Beautiful TUI (Bubble Tea)
 - [x] Skill packaging
-- [x] MCP server (v0.2)
-- [ ] Web dashboard (v0.3)
+- [x] Doctor/setup checks
+- [ ] Web dashboard/API
+- [ ] MCP integration
 - [ ] Cloud sync (future)
 
 ---

@@ -58,7 +58,7 @@ func runYoutube(cmd *cobra.Command, args []string) error {
 	// Check yt-dlp is available
 	ytdlp, err := exec.LookPath("yt-dlp")
 	if err != nil {
-		return fmt.Errorf("yt-dlp not found — install with: pip install yt-dlp")
+		return fmt.Errorf("yt-dlp not found\nInstall with: pipx install yt-dlp")
 	}
 
 	start := time.Now()
