@@ -225,16 +225,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			title := ""
 			for _, l := range strings.Split(msg.output, "\n") {
 				if strings.HasPrefix(l, "title:") {
-					title = strings.TrimSpace(strings.TrimPrefix(l, "title:"))
+					title = strings.Trim(strings.TrimSpace(strings.TrimPrefix(l, "title:")), `"`)
 					break
 				}
 			}
-			m.history.Add(config.HistoryEntry{
+			if err := m.history.Add(config.HistoryEntry{
 				URL:       m.squeezeURL,
 				Source:    menuItems[m.selectedSource].cmd,
 				Title:     title,
 				WordCount: words,
-			})
+			}); err != nil {
+				m.statusMsg = "History save failed: " + err.Error()
+			}
 		}
 
 		// Set up viewport for result

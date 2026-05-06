@@ -11,7 +11,7 @@ import (
 // HistoryEntry tracks a single extraction
 type HistoryEntry struct {
 	URL        string `json:"url"`
-	Source     string `json:"source"`     // extract, youtube, instagram, reddit, pdf
+	Source     string `json:"source"` // extract, youtube, instagram, reddit, pdf
 	Title      string `json:"title"`
 	OutputFile string `json:"output_file"`
 	WordCount  int    `json:"word_count"`
@@ -35,7 +35,9 @@ func LoadHistory() *History {
 		return h
 	}
 
-	json.Unmarshal(data, h)
+	if err := json.Unmarshal(data, h); err != nil {
+		return &History{}
+	}
 	return h
 }
 
@@ -79,10 +81,15 @@ func (h *History) Recent(n int) []HistoryEntry {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	if n <= 0 {
+		return nil
+	}
 	if n > len(h.Entries) {
 		n = len(h.Entries)
 	}
-	return h.Entries[:n]
+	recent := make([]HistoryEntry, n)
+	copy(recent, h.Entries[:n])
+	return recent
 }
 
 // Stats returns summary statistics.

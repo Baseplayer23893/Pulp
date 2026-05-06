@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,7 +99,10 @@ func readStdin() ([]byte, error) {
 			data = append(data, buf[:n]...)
 		}
 		if err != nil {
-			break
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return data, err
 		}
 	}
 	return data, nil

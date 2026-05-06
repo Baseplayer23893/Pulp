@@ -4,6 +4,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/Baseplayer23893/Pulp/internal/yamlutil"
 )
 
 var (
@@ -90,15 +92,35 @@ func cleanTrackingURLs(content string) string {
 
 // AddFrontmatter prepends YAML frontmatter to markdown content
 func AddFrontmatter(content string, meta map[string]string) string {
+	if len(meta) == 0 {
+		return content
+	}
+
 	var sb strings.Builder
 	sb.WriteString("---\n")
 	for key, value := range meta {
+		if !isSafeYAMLKey(key) {
+			continue
+		}
 		sb.WriteString(key)
 		sb.WriteString(": ")
-		sb.WriteString(value)
+		sb.WriteString(yamlutil.QuoteString(value))
 		sb.WriteString("\n")
 	}
 	sb.WriteString("---\n\n")
 	sb.WriteString(content)
 	return sb.String()
+}
+
+func isSafeYAMLKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for _, r := range key {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/Baseplayer23893/Pulp/internal/yamlutil"
 )
 
 // WriteFile writes content to a file, creating directories as needed
@@ -22,8 +24,8 @@ func WriteFile(path string, content string) error {
 // WriteOutput handles writing content to file or stdout
 func WriteOutput(content string, outputPath string) error {
 	if outputPath == "" {
-		fmt.Print(content)
-		return nil
+		_, err := fmt.Fprint(os.Stdout, content)
+		return err
 	}
 
 	return WriteFile(outputPath, content)
@@ -43,17 +45,18 @@ func CreateSkillZip(name string, content string, references []string, outputDir 
 	if err != nil {
 		return "", fmt.Errorf("failed to create zip: %w", err)
 	}
-	defer file.Close()
 
 	w := zip.NewWriter(file)
-	defer w.Close()
 
 	// Add SKILL.md
 	skillFile, err := w.Create(safeName + "/SKILL.md")
 	if err != nil {
+		_ = file.Close()
 		return "", fmt.Errorf("failed to add SKILL.md: %w", err)
 	}
 	if _, err := skillFile.Write([]byte(content)); err != nil {
+		_ = w.Close()
+		_ = file.Close()
 		return "", err
 	}
 
@@ -69,7 +72,17 @@ func CreateSkillZip(name string, content string, references []string, outputDir 
 		if err != nil {
 			continue
 		}
-		refFile.Write(data)
+		if _, err := refFile.Write(data); err != nil {
+			_ = w.Close()
+			return "", fmt.Errorf("failed to write reference %s: %w", ref, err)
+		}
+	}
+
+	if err := w.Close(); err != nil {
+		return "", fmt.Errorf("failed to finalize zip: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return "", fmt.Errorf("failed to close zip: %w", err)
 	}
 
 	return zipPath, nil
@@ -79,16 +92,20 @@ func CreateSkillZip(name string, content string, references []string, outputDir 
 func GenerateFrontmatter(name, description, source string, tags []string) string {
 	var sb strings.Builder
 	sb.WriteString("---\n")
-	sb.WriteString(fmt.Sprintf("name: %s\n", name))
+	sb.WriteString(fmt.Sprintf("name: %s\n", yamlutil.QuoteString(name)))
 	if description != "" {
-		sb.WriteString(fmt.Sprintf("description: %s\n", description))
+		sb.WriteString(fmt.Sprintf("description: %s\n", yamlutil.QuoteString(description)))
 	}
 	sb.WriteString(fmt.Sprintf("created: %s\n", time.Now().Format("2006-01-02")))
 	if source != "" {
-		sb.WriteString(fmt.Sprintf("source: %s\n", source))
+		sb.WriteString(fmt.Sprintf("source: %s\n", yamlutil.QuoteString(source)))
 	}
 	if len(tags) > 0 {
-		sb.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(tags, ", ")))
+		quotedTags := make([]string, 0, len(tags))
+		for _, tag := range tags {
+			quotedTags = append(quotedTags, yamlutil.QuoteString(tag))
+		}
+		sb.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(quotedTags, ", ")))
 	}
 	sb.WriteString("---\n\n")
 	return sb.String()

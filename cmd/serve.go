@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -60,7 +61,15 @@ func handleAPIExtract(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"status":"extracting","url":"%s","message":"Use CLI for extraction: pulp extract %s"}`, url, url)
+	resp := map[string]string{
+		"status":  "extracting",
+		"url":     url,
+		"message": "Use CLI for extraction: pulp extract " + url,
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, `{"error":"failed to encode response"}`, http.StatusInternalServerError)
+		return
+	}
 }
 
 const dashboardHTML = `<!DOCTYPE html>

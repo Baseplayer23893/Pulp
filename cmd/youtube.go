@@ -181,6 +181,7 @@ func parseVTT(vtt string) string {
 
 	// VTT format: timestamp lines followed by text lines
 	timestampRegex := regexp.MustCompile(`^\d{2}:\d{2}:\d{2}\.\d{3}\s*-->`)
+	cueIDRegex := regexp.MustCompile(`^\d+$`)
 	tagRegex := regexp.MustCompile(`<[^>]+>`)
 
 	for _, line := range lines {
@@ -194,7 +195,7 @@ func parseVTT(vtt string) string {
 		}
 
 		// Skip numeric-only lines (cue identifiers)
-		if regexp.MustCompile(`^\d+$`).MatchString(line) {
+		if cueIDRegex.MatchString(line) {
 			continue
 		}
 

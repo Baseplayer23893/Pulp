@@ -98,13 +98,33 @@ func TestAddFrontmatter(t *testing.T) {
 	if !strings.HasPrefix(result, "---\n") {
 		t.Error("frontmatter should start with ---")
 	}
-	if !strings.Contains(result, "title: Test") {
+	if !strings.Contains(result, `title: "Test"`) {
 		t.Error("frontmatter should contain title")
 	}
-	if !strings.Contains(result, "source: https://example.com") {
+	if !strings.Contains(result, `source: "https://example.com"`) {
 		t.Error("frontmatter should contain source")
 	}
 	if !strings.Contains(result, "---\n\n# Hello") {
 		t.Error("frontmatter should be followed by content")
+	}
+}
+
+func TestAddFrontmatterQuotesInjectedValues(t *testing.T) {
+	result := AddFrontmatter("# Hello\n", map[string]string{
+		"title": "safe\ninjected: true",
+	})
+
+	if strings.Contains(result, "\ninjected: true\n") {
+		t.Fatalf("frontmatter value was not escaped: %q", result)
+	}
+	if !strings.Contains(result, `title: "safe\ninjected: true"`) {
+		t.Fatalf("frontmatter should quote and escape injected value, got %q", result)
+	}
+}
+
+func TestAddFrontmatterEmptyMeta(t *testing.T) {
+	content := "# Hello\n"
+	if got := AddFrontmatter(content, nil); got != content {
+		t.Fatalf("AddFrontmatter with nil meta = %q, want %q", got, content)
 	}
 }
