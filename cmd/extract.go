@@ -10,6 +10,7 @@ import (
 	"github.com/Baseplayer23893/Pulp/internal/cleaner"
 	"github.com/Baseplayer23893/Pulp/internal/defuddle"
 	"github.com/Baseplayer23893/Pulp/internal/storage"
+	"github.com/Baseplayer23893/Pulp/internal/urlutil"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +30,10 @@ func init() {
 }
 
 func runExtract(cmd *cobra.Command, args []string) error {
-	url := args[0]
+	url, err := urlutil.NormalizeURL(args[0])
+	if err != nil {
+		return fmt.Errorf("invalid URL: %s", err)
+	}
 	targetOutput := resolveOutputPath(outputFlag, url, ".md")
 
 	if !quietFlag {
