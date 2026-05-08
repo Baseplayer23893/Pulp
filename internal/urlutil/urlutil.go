@@ -23,15 +23,15 @@ func NormalizeURL(raw string) (string, error) {
 		return "", fmt.Errorf("looks like a file path, not a web URL")
 	}
 
-	if len(raw) > 1 && raw[1] == ':' &&
-		((raw[0] >= 'A' && raw[0] <= 'Z') || (raw[0] >= 'a' && raw[0] <= 'z')) {
+	// Check for Windows-style paths like C:\path or c:/path
+	if len(raw) > 2 && raw[1] == ':' && (raw[2] == '\\' || raw[2] == '/') {
 		return "", fmt.Errorf("looks like a file path, not a web URL")
 	}
 
 	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
 		u, err := url.Parse(raw)
 		if err != nil || u.Host == "" {
-			return "", fmt.Errorf("invalid URL format")
+			return "", fmt.Errorf("invalid URL: missing host %q", raw)
 		}
 		return raw, nil
 	}
@@ -39,7 +39,7 @@ func NormalizeURL(raw string) (string, error) {
 	full := "https://" + raw
 	u, err := url.Parse(full)
 	if err != nil || u.Host == "" {
-		return "", fmt.Errorf("invalid URL format")
+		return "", fmt.Errorf("invalid URL: missing host %q", raw)
 	}
 	return full, nil
 }
