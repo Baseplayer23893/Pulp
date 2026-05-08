@@ -27,6 +27,7 @@ import (
 var (
 	writeClipboard = clipboard.WriteAll
 	readClipboard  = clipboard.ReadAll
+	slugCleaner    = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 )
 
 // ── State machine ──
@@ -64,15 +65,12 @@ var menuItems = []menuItem{
 
 // ── Messages ──
 
-type squeezeStartMsg struct{}
 type squeezeDoneMsg struct {
 	output string
 	err    error
 	dur    time.Duration
 	reqID  int
 }
-type squeezeProgressMsg float64
-
 // ── Model ──
 
 type Model struct {
@@ -1298,8 +1296,7 @@ func outputSlugFromInput(raw string) string {
 		}
 	}
 
-	re := regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
-	candidate = re.ReplaceAllString(candidate, "-")
+	candidate = slugCleaner.ReplaceAllString(candidate, "-")
 	candidate = strings.Trim(candidate, "-._")
 	if candidate == "" {
 		return "output"

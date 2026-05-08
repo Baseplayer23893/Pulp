@@ -65,11 +65,6 @@ var errorBadge = lipgloss.NewStyle().
 	Bold(true).
 	Padding(0, 1)
 
-var infoBadge = lipgloss.NewStyle().
-	Background(colorBorder).
-	Foreground(colorText).
-	Padding(0, 1)
-
 // ── Key hints ──
 var keyStyle = lipgloss.NewStyle().
 	Foreground(colorOrange).
@@ -88,10 +83,6 @@ var taglineStyle = lipgloss.NewStyle().
 	Italic(true)
 
 // ── Result preview ──
-var previewTitleStyle = lipgloss.NewStyle().
-	Foreground(colorOrange).
-	Bold(true)
-
 var statLabelStyle = lipgloss.NewStyle().
 	Foreground(colorMuted)
 
