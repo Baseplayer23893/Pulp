@@ -20,6 +20,20 @@ type Result struct {
 	WordCount   int    `json:"wordCount"`
 }
 
+// Validate checks that the result contains usable content. It returns an error
+// if defuddle returned a structurally valid but empty response, which can happen
+// when the defuddle version changes its output format or the extraction fails
+// server-side without reporting an error.
+func (r *Result) Validate() error {
+	if r.Markdown == "" && r.Content == "" && r.Title == "" {
+		return fmt.Errorf("defuddle returned empty content — the output format may have changed or the page could not be extracted")
+	}
+	if r.WordCount < 0 {
+		return fmt.Errorf("defuddle returned negative word count (%d) — output format may have changed", r.WordCount)
+	}
+	return nil
+}
+
 // findBinary locates the defuddle CLI binary
 func findBinary() (string, error) {
 	// Check standard PATH first
@@ -66,11 +80,20 @@ func ParseURL(url string) (*Result, error) {
 
 	var result Result
 	if err := json.Unmarshal(out, &result); err != nil {
-		// If JSON parsing fails, the output is likely raw markdown
+		// If JSON parsing fails, the output is likely raw markdown.
+		// Still validate that we got something.
+		markdown := strings.TrimSpace(string(out))
+		if markdown == "" {
+			return nil, fmt.Errorf("defuddle produced no usable output")
+		}
 		return &Result{
 			URL:      url,
-			Markdown: strings.TrimSpace(string(out)),
+			Markdown: markdown,
 		}, nil
+	}
+
+	if err := result.Validate(); err != nil {
+		return nil, fmt.Errorf("defuddle result invalid: %w", err)
 	}
 
 	return &result, nil
