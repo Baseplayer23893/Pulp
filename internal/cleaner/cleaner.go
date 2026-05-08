@@ -20,6 +20,8 @@ var (
 	emptyLinks = regexp.MustCompile(`\[\s*\]\([^)]*\)`)
 )
 
+var linkRegex = regexp.MustCompile(`\[([^\]]*)\]\(([^)]+)\)`)
+
 // Clean performs post-processing on extracted markdown content
 func Clean(markdown string) string {
 	result := markdown
@@ -50,9 +52,6 @@ func Clean(markdown string) string {
 
 // cleanTrackingURLs removes tracking parameters from URLs in markdown
 func cleanTrackingURLs(content string) string {
-	// Match markdown links: [text](url)
-	linkRegex := regexp.MustCompile(`\[([^\]]*)\]\(([^)]+)\)`)
-
 	return linkRegex.ReplaceAllStringFunc(content, func(match string) string {
 		parts := linkRegex.FindStringSubmatch(match)
 		if len(parts) != 3 {

@@ -43,20 +43,22 @@ func LoadHistory() *History {
 
 // Add appends a new entry (newest first) and immediately persists to disk.
 func (h *History) Add(entry HistoryEntry) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	if entry.Timestamp == "" {
 		entry.Timestamp = time.Now().Format(time.RFC3339)
 	}
+
+	// Load maxHistory outside the lock — cache avoids disk I/O here.
+	maxHistory := CachedConfig().MaxHistory
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
 	// Prepend (newest first)
 	h.Entries = append([]HistoryEntry{entry}, h.Entries...)
 
 	// Trim to max
-	cfg := Load()
-	if len(h.Entries) > cfg.MaxHistory {
-		h.Entries = h.Entries[:cfg.MaxHistory]
+	if len(h.Entries) > maxHistory {
+		h.Entries = h.Entries[:maxHistory]
 	}
 
 	return h.save()

@@ -10,6 +10,7 @@ import (
 
 	"github.com/Baseplayer23893/Pulp/internal/cleaner"
 	"github.com/Baseplayer23893/Pulp/internal/defuddle"
+	"github.com/Baseplayer23893/Pulp/internal/urlutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -285,6 +286,11 @@ func toolExtractContent(id json.RawMessage, rawArgs json.RawMessage) jsonRPCResp
 	}
 	if args.URL == "" {
 		return rpcErrorResponse(id, codeInvalidParams, "Invalid arguments: \"url\" is required")
+	}
+	if normalizedURL, err := urlutil.NormalizeURL(args.URL); err != nil {
+		return toolErrorResult(id, fmt.Sprintf("Invalid URL: %s", err))
+	} else {
+		args.URL = normalizedURL
 	}
 
 	// Check that defuddle is available.

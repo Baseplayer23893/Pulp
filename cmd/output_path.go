@@ -10,6 +10,8 @@ import (
 	"github.com/Baseplayer23893/Pulp/internal/config"
 )
 
+var slugCleanerRe = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+
 const forceStdoutEnv = "PULP_FORCE_STDOUT"
 
 func resolveOutputPath(explicitPath string, source string, ext string) string {
@@ -42,8 +44,7 @@ func sanitizedOutputName(source string) string {
 		}
 	}
 
-	re := regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
-	raw = re.ReplaceAllString(raw, "-")
+	raw = slugCleanerRe.ReplaceAllString(raw, "-")
 	raw = strings.Trim(raw, "-._")
 	if raw == "" {
 		return "output"

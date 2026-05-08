@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // Config holds Pulp configuration
@@ -75,6 +76,19 @@ func Load() *Config {
 	}
 
 	return cfg
+}
+
+var cachedCfg *Config
+var cfgOnce sync.Once
+
+// CachedConfig returns a cached config, loading from disk at most once.
+// Use this when you need the config repeatedly in tight loops — it avoids
+// repeated disk reads and JSON unmarshaling on every call.
+func CachedConfig() *Config {
+	cfgOnce.Do(func() {
+		cachedCfg = Load()
+	})
+	return cachedCfg
 }
 
 // Save writes the current config as JSON to the config directory.

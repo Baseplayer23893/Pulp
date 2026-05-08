@@ -14,6 +14,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+import (
+	"github.com/Baseplayer23893/Pulp/internal/urlutil"
+)
+
+var (
+	instagramMentionRe = regexp.MustCompile(`@(\w+)`)
+	instagramTagRe     = regexp.MustCompile(`#(\w+)`)
+)
+
 var instagramCmd = &cobra.Command{
 	Use:     "instagram <url>",
 	Aliases: []string{"ig", "insta"},
@@ -58,7 +67,10 @@ type SubtitleEntry struct {
 }
 
 func runInstagram(cmd *cobra.Command, args []string) error {
-	url := args[0]
+	url, err := urlutil.NormalizeURL(args[0])
+	if err != nil {
+		return fmt.Errorf("invalid URL: %s", err)
+	}
 	targetOutput := resolveOutputPath(outputFlag, url, ".md")
 
 	// Normalize Instagram URL
@@ -236,8 +248,7 @@ func normalizeInstagramURL(rawURL string) string {
 // formatInstagramCaption cleans up Instagram caption text
 func formatInstagramCaption(caption string) string {
 	// Convert @mentions to bold
-	mentionRe := regexp.MustCompile(`@(\w+)`)
-	caption = mentionRe.ReplaceAllString(caption, "**@$1**")
+	caption = instagramMentionRe.ReplaceAllString(caption, "**@$1**")
 
 	// Normalize whitespace but preserve intentional line breaks
 	lines := strings.Split(caption, "\n")
@@ -254,8 +265,7 @@ func formatInstagramCaption(caption string) string {
 
 // extractHashtags pulls all #hashtags from text
 func extractHashtags(text string) []string {
-	re := regexp.MustCompile(`#(\w+)`)
-	matches := re.FindAllString(text, -1)
+	matches := instagramTagRe.FindAllString(text, -1)
 
 	// Deduplicate
 	seen := make(map[string]bool)

@@ -11,7 +11,16 @@ import (
 
 	"github.com/Baseplayer23893/Pulp/internal/cleaner"
 	"github.com/Baseplayer23893/Pulp/internal/storage"
+	"github.com/Baseplayer23893/Pulp/internal/urlutil"
 	"github.com/spf13/cobra"
+)
+
+var (
+	youtubeTimestampRe = regexp.MustCompile(`^(?:\d{2}:)?\d{2}:\d{2}[.,]\d{3}\s*-->`)
+	youtubeCueIDRe    = regexp.MustCompile(`^\d+$`)
+	youtubeTagRe      = regexp.MustCompile(`<[^>]+>`)
+	youtubeSpaceRe    = regexp.MustCompile(`\s+`)
+	youtubeSentenceRe = regexp.MustCompile(`([.!?])\s+`)
 )
 
 var youtubeCmd = &cobra.Command{
@@ -48,7 +57,10 @@ type YouTubeInfo struct {
 }
 
 func runYoutube(cmd *cobra.Command, args []string) error {
-	url := args[0]
+	url, err := urlutil.NormalizeURL(args[0])
+	if err != nil {
+		return fmt.Errorf("invalid URL: %s", err)
+	}
 	targetOutput := resolveOutputPath(outputFlag, url, ".md")
 
 	if !quietFlag {
@@ -180,27 +192,23 @@ func parseVTT(vtt string) string {
 	seen := make(map[string]bool)
 
 	// VTT format: timestamp lines followed by text lines
-	timestampRegex := regexp.MustCompile(`^(?:\d{2}:)?\d{2}:\d{2}[.,]\d{3}\s*-->`)
-	cueIDRegex := regexp.MustCompile(`^\d+$`)
-	tagRegex := regexp.MustCompile(`<[^>]+>`)
-
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 
 		// Skip empty lines, WEBVTT header, timestamps, NOTE lines
 		if line == "" || line == "WEBVTT" || strings.HasPrefix(line, "Kind:") ||
 			strings.HasPrefix(line, "Language:") || strings.HasPrefix(line, "NOTE") ||
-			timestampRegex.MatchString(line) {
+			youtubeTimestampRe.MatchString(line) {
 			continue
 		}
 
 		// Skip numeric-only lines (cue identifiers)
-		if cueIDRegex.MatchString(line) {
+		if youtubeCueIDRe.MatchString(line) {
 			continue
 		}
 
 		// Remove HTML-like tags
-		line = tagRegex.ReplaceAllString(line, "")
+		line = youtubeTagRe.ReplaceAllString(line, "")
 		line = strings.TrimSpace(line)
 
 		if line == "" {
@@ -219,7 +227,7 @@ func parseVTT(vtt string) string {
 
 func cleanTranscript(transcript string) string {
 	// Normalize whitespace
-	transcript = regexp.MustCompile(`\s+`).ReplaceAllString(transcript, " ")
+	transcript = youtubeSpaceRe.ReplaceAllString(transcript, " ")
 	transcript = strings.TrimSpace(transcript)
 
 	// Break into sentences for readability
@@ -242,7 +250,7 @@ func cleanTranscript(transcript string) string {
 
 func splitSentences(text string) []string {
 	// Simple sentence splitting
-	re := regexp.MustCompile(`([.!?])\s+`)
+	re := youtubeSentenceRe
 	parts := re.Split(text, -1)
 	delims := re.FindAllStringSubmatch(text, -1)
 

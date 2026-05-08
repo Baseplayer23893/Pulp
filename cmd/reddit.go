@@ -15,6 +15,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+import (
+	"github.com/Baseplayer23893/Pulp/internal/urlutil"
+)
+
+var (
+	redditSchemelessLink = regexp.MustCompile(`\]\(//`)
+	redditMultiNewlines  = regexp.MustCompile(`\n{3,}`)
+)
+
 var (
 	redditTopN     int
 	redditDepth    int
@@ -105,7 +114,10 @@ func (r *RedditReplies) UnmarshalJSON(data []byte) error {
 }
 
 func runReddit(cmd *cobra.Command, args []string) error {
-	url := args[0]
+	url, err := urlutil.NormalizeURL(args[0])
+	if err != nil {
+		return fmt.Errorf("invalid URL: %s", err)
+	}
 	targetOutput := resolveOutputPath(outputFlag, url, ".md")
 	if !quietFlag {
 		fmt.Fprintf(os.Stderr, "🔗 Extracting Reddit post: %s\n", url)
@@ -126,6 +138,11 @@ func runReddit(cmd *cobra.Command, args []string) error {
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 5 {
 				return fmt.Errorf("too many redirects")
+			}
+			// Discard unread body so HTTP/1.1 keep-alive connections are reusable.
+			if req.Body != nil {
+				io.ReadAll(req.Body)
+				req.Body = nil
 			}
 			return nil
 		},
@@ -348,12 +365,10 @@ func cleanRedditMarkdown(text string) string {
 	text = strings.ReplaceAll(text, "&nbsp;", " ")
 
 	// Clean up Reddit's weird link format: [text](//example.com)
-	schemelessLink := regexp.MustCompile(`\]\(//`)
-	text = schemelessLink.ReplaceAllString(text, "](https://")
+	text = redditSchemelessLink.ReplaceAllString(text, "](https://")
 
 	// Clean excessive newlines
-	multiNewlines := regexp.MustCompile(`\n{3,}`)
-	text = multiNewlines.ReplaceAllString(text, "\n\n")
+	text = redditMultiNewlines.ReplaceAllString(text, "\n\n")
 
 	return strings.TrimSpace(text)
 }
