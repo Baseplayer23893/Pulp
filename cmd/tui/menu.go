@@ -21,6 +21,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Baseplayer23893/Pulp/internal/config"
+	"github.com/Baseplayer23893/Pulp/internal/urlutil"
 )
 
 var (
@@ -301,7 +302,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.quickInput.Blur()
 				return m, nil
 			case "enter":
-				url := strings.TrimSpace(m.quickInput.Value())
+				url, err := urlutil.NormalizeURL(strings.TrimSpace(m.quickInput.Value()))
+				if err != nil {
+					m.noticeMsg = err.Error()
+					return m, nil
+				}
 				if url != "" {
 					// Auto-detect source and squeeze
 					m.squeezeURL = url
@@ -356,7 +361,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.noticeMsg = ""
 			return m, nil
 		case "enter":
-			url := strings.TrimSpace(m.urlInput.Value())
+			url, err := urlutil.NormalizeURL(strings.TrimSpace(m.urlInput.Value()))
+			if err != nil {
+				m.noticeMsg = err.Error()
+				return m, nil
+			}
 			if url != "" {
 				m.squeezeURL = url
 				m.noticeMsg = ""
