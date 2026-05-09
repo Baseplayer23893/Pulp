@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Baseplayer23893/Pulp/internal/cleaner"
@@ -229,27 +230,45 @@ func fetchHNComments(kids []int, limit int, depth int) ([]HNItem, error) {
 		return nil, nil
 	}
 
-	var comments []HNItem
+	// Fetch top-level comments in parallel
+	type result struct {
+		item  *HNItem
+		index int
+	}
 
-	for _, kidID := range kids {
-		if len(comments) >= limit {
+	results := make([]result, len(kids))
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	completed := 0
+
+	for i, kidID := range kids {
+		if i >= limit {
 			break
 		}
+		wg.Add(1)
+		go func(idx int, id int) {
+			defer wg.Done()
+			item, err := fetchHNItem(id)
+			mu.Lock()
+			if err == nil && item != nil {
+				results[idx] = result{item: item, index: idx}
+				completed++
+			}
+			mu.Unlock()
+		}(i, kidID)
+	}
+	wg.Wait()
 
-		item, err := fetchHNItem(kidID)
-		if err != nil {
-			continue
-		}
+	// Collect valid comments
+	var comments []HNItem
+	for _, r := range results {
+		if r.item != nil && r.item.Type == "comment" && r.item.Text != "" {
+			comments = append(comments, *r.item)
 
-		if item.Type == "comment" && item.Text != "" {
-			comments = append(comments, *item)
-
-			// Fetch replies
-			if len(item.Kids) > 0 && depth < hnMaxDepth {
-				replies, err := fetchHNComments(item.Kids, limit-len(comments), depth+1)
-				if err == nil {
-					comments = append(comments, replies...)
-				}
+			// Fetch replies recursively (still sequential to maintain order)
+			if len(r.item.Kids) > 0 && depth < hnMaxDepth && len(comments) < limit {
+				replies, _ := fetchHNComments(r.item.Kids, limit-len(comments), depth+1)
+				comments = append(comments, replies...)
 			}
 		}
 	}

@@ -8,11 +8,25 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Baseplayer23893/Pulp/internal/config"
 	"github.com/Baseplayer23893/Pulp/internal/version"
 	"github.com/spf13/cobra"
 )
+
+// CORS middleware
+func withCORS(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == "OPTIONS" {
+			return
+		}
+		next(w, r)
+	}
+}
 
 var servePort int
 
@@ -32,20 +46,20 @@ func init() {
 func runServe(cmd *cobra.Command, args []string) error {
 	mux := http.NewServeMux()
 
-	// API routes
-	mux.HandleFunc("/api/extract", handleAPIExtract)
-	mux.HandleFunc("/api/history", handleAPIHistory)
-	mux.HandleFunc("/api/config", handleAPIConfig)
-	mux.HandleFunc("/api/health", handleHealth)
+	// API routes with logging and CORS
+	mux.HandleFunc("/api/extract", logRequest(withCORS(handleAPIExtract)))
+	mux.HandleFunc("/api/history", logRequest(withCORS(handleAPIHistory)))
+	mux.HandleFunc("/api/config", logRequest(withCORS(handleAPIConfig)))
+	mux.HandleFunc("/api/health", logRequest(withCORS(handleHealth)))
+
+	// Find dashboard directory
+	dashboardDir := findDashboardDir()
+	if dashboardDir == "" {
+		fmt.Fprintf(os.Stderr, "❌ Dashboard not found. Run 'pulp serve' from directory containing dashboard-dist/\n")
+		return fmt.Errorf("dashboard-dist not found")
+	}
 
 	// Serve static files from the dashboard build
-	dashboardDir := filepath.Join(getExeDir(), "..", "..", "dashboard-dist")
-	if _, err := os.Stat(dashboardDir); os.IsNotExist(err) {
-		// Also try relative to cwd
-		if _, err := os.Stat("dashboard-dist"); err == nil {
-			dashboardDir = "dashboard-dist"
-		}
-	}
 	fs := http.FileServer(http.Dir(dashboardDir))
 	mux.Handle("/", fs)
 
@@ -53,7 +67,43 @@ func runServe(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(os.Stderr, "🍊 Pulp dashboard running at http://localhost%s\n", addr)
 	fmt.Fprintf(os.Stderr, "   Press Ctrl+C to stop\n")
 
-	return http.ListenAndServe(addr, mux)
+	// Create server with timeouts
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      mux,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 5 * time.Minute, // Allow long extractions
+		IdleTimeout:  60 * time.Second,
+	}
+
+	return srv.ListenAndServe()
+}
+
+func findDashboardDir() string {
+	// Try multiple locations
+	paths := []string{
+		filepath.Join(getExeDir(), "..", "..", "dashboard-dist"),
+		filepath.Join(getExeDir(), "dashboard-dist"),
+		"dashboard-dist",
+		"./dashboard-dist",
+		filepath.Join(os.Getenv("HOME"), "Pulp", "dashboard-dist"),
+	}
+
+	for _, p := range paths {
+		if info, err := os.Stat(p); err == nil && info.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
+
+func logRequest(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next(w, r)
+		duration := time.Since(start)
+		fmt.Fprintf(os.Stderr, "%s %s → %d (%v)\n", r.Method, r.URL.Path, 0, duration)
+	}
 }
 
 func getExeDir() string {
