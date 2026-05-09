@@ -18,7 +18,7 @@ func WriteFile(path string, content string) error {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
-	return os.WriteFile(path, []byte(content), 0644)
+	return os.WriteFile(path, []byte(content), 0600)
 }
 
 // WriteOutput handles writing content to file or stdout

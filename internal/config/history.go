@@ -128,5 +128,5 @@ func (h *History) save() error {
 		return fmt.Errorf("failed to marshal history: %w", err)
 	}
 
-	return os.WriteFile(HistoryPath(), data, 0644)
+	return os.WriteFile(HistoryPath(), data, 0600)
 }

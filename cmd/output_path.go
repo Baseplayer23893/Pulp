@@ -1,16 +1,13 @@
 package cmd
 
 import (
-	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/Baseplayer23893/Pulp/internal/config"
+	"github.com/Baseplayer23893/Pulp/internal/urlutil"
 )
-
-var slugCleanerRe = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
 const forceStdoutEnv = "PULP_FORCE_STDOUT"
 
@@ -26,28 +23,5 @@ func resolveOutputPath(explicitPath string, source string, ext string) string {
 	if outDir == "" || outDir == "." {
 		return ""
 	}
-	return filepath.Join(outDir, sanitizedOutputName(source)+ext)
-}
-
-func sanitizedOutputName(source string) string {
-	raw := strings.TrimSpace(source)
-	if raw == "" {
-		return "output"
-	}
-
-	if parsed, err := url.Parse(raw); err == nil && parsed.Host != "" {
-		p := strings.Trim(parsed.Path, "/")
-		if p == "" {
-			raw = parsed.Host
-		} else {
-			raw = filepath.Base(p)
-		}
-	}
-
-	raw = slugCleanerRe.ReplaceAllString(raw, "-")
-	raw = strings.Trim(raw, "-._")
-	if raw == "" {
-		return "output"
-	}
-	return raw
+	return filepath.Join(outDir, urlutil.SlugFromURL(source)+ext)
 }

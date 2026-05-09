@@ -102,7 +102,7 @@ func (c *Config) Save() error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	return os.WriteFile(ConfigPath(), data, 0644)
+	return os.WriteFile(ConfigPath(), data, 0600)
 }
 
 // ResolveOutputDir returns the output directory with precedence:

@@ -1,11 +1,13 @@
 package defuddle
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -88,15 +90,30 @@ func locateBinary() (string, error) {
 
 // ParseURL extracts clean markdown from a URL using defuddle CLI
 func ParseURL(url string) (*Result, error) {
+	return ParseURLContext(context.Background(), url)
+}
+
+// ParseURLContext extracts clean markdown with context support
+func ParseURLContext(ctx context.Context, url string) (*Result, error) {
 	bin, err := findBinary()
 	if err != nil {
 		return nil, err
 	}
 
+	// Default timeout of 2 minutes if no context deadline
+	if ctx.Err() == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+	}
+
 	// Run defuddle parse with JSON output to get metadata + content
-	cmd := exec.Command(bin, "parse", "--json", "--markdown", url)
+	cmd := exec.CommandContext(ctx, bin, "parse", "--json", "--markdown", url)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("extraction timed out: %w", ctx.Err())
+		}
 		return nil, fmt.Errorf("defuddle parse failed: %w\noutput: %s", err, string(out))
 	}
 

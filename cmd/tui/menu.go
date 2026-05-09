@@ -577,7 +577,7 @@ func saveResultOutput(source string, content string) (string, error) {
 		return "", fmt.Errorf("create output directory %s: %w", outDir, err)
 	}
 	out := filepath.Join(outDir, urlutil.SlugFromURL(source)+".md")
-	if err := os.WriteFile(out, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(out, []byte(content), 0600); err != nil {
 		return "", err
 	}
 	return out, nil

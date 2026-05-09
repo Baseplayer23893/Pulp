@@ -210,7 +210,19 @@ func extractTranscript(ytdlp string, url string) (string, error) {
 		"-o", tmpDir+"/transcript",
 		url,
 	)
-	subCmd.Run() // Ignore error — we check for files
+	subOut, subErr := subCmd.CombinedOutput()
+
+	// Check if yt-dlp itself failed
+	if subErr != nil {
+		// Check if it's a "no subtitles available" case (exit code 1)
+		// vs a real error
+		errMsg := string(subOut)
+		if strings.Contains(errMsg, "WARNING: Could not find subtitles") ||
+			strings.Contains(errMsg, "WARNING: No video subtitles found") {
+			return "", fmt.Errorf("no subtitles available for this video")
+		}
+		return "", fmt.Errorf("yt-dlp failed: %w\n%s", subErr, errMsg)
+	}
 
 	// Find and read the subtitle file
 	entries, err := os.ReadDir(tmpDir)

@@ -45,21 +45,29 @@ func cleanupCache() error {
 		return err
 	}
 
-	if len(entries) <= MaxCacheItems {
+	if len(entries) == 0 {
 		return nil
 	}
 
-	// Get file info for sorting by age
 	type fileInfo struct {
 		name    string
 		size    int64
 		modTime time.Time
 	}
 	var files []fileInfo
+	var totalSize int64
 	for _, e := range entries {
 		if info, err := os.Stat(filepath.Join(CacheDir, e.Name())); err == nil {
 			files = append(files, fileInfo{e.Name(), info.Size(), info.ModTime()})
+			totalSize += info.Size()
 		}
+	}
+
+	maxSizeBytes := int64(MaxCacheSizeMB) * 1024 * 1024
+	needsCleanup := len(files) > MaxCacheItems || totalSize > maxSizeBytes
+
+	if !needsCleanup {
+		return nil
 	}
 
 	// Sort by oldest first
@@ -67,10 +75,17 @@ func cleanupCache() error {
 		return files[i].modTime.Before(files[j].modTime)
 	})
 
-	// Remove oldest entries until under limit
-	toRemove := len(files) - MaxCacheItems
-	for i := 0; i < toRemove; i++ {
-		os.Remove(filepath.Join(CacheDir, files[i].name))
+	// Remove oldest entries until under both limits
+	for i := 0; i < len(files); i++ {
+		removed := files[i].size
+		if err := os.Remove(filepath.Join(CacheDir, files[i].name)); err != nil {
+			continue
+		}
+		totalSize -= removed
+		remaining := len(files) - i - 1
+		if remaining <= MaxCacheItems && totalSize <= maxSizeBytes {
+			break
+		}
 	}
 
 	return nil
@@ -135,7 +150,7 @@ func Set(url, content string, ttl time.Duration) error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }
 
 func Invalidate(url string) error {

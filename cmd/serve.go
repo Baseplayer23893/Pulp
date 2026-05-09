@@ -61,7 +61,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	// Serve static files from the dashboard build
 	fs := http.FileServer(http.Dir(dashboardDir))
-	mux.Handle("/", fs)
+	mux.Handle("/", spaHandler{fs, filepath.Join(dashboardDir, "index.html")})
 
 	addr := fmt.Sprintf(":%d", servePort)
 	fmt.Fprintf(os.Stderr, "🍊 Pulp dashboard running at http://localhost%s\n", addr)
@@ -109,6 +109,27 @@ func logRequest(next http.HandlerFunc) http.HandlerFunc {
 func getExeDir() string {
 	exe, _ := os.Executable()
 	return filepath.Dir(exe)
+}
+
+// spaHandler serves static files but falls back to index.html for SPA routing
+type spaHandler struct {
+	fileServer http.Handler
+	indexPath  string
+}
+
+func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+
+	// API routes already handled by mux, so this only catches frontend routes
+
+	// Check if the path is a file (has extension) - serve directly if exists
+	if strings.Contains(path, ".") {
+		h.fileServer.ServeHTTP(w, r)
+		return
+	}
+
+	// For SPA routes (no extension), serve index.html
+	http.ServeFile(w, r, h.indexPath)
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
