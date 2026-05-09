@@ -98,6 +98,53 @@ pulp doctor                   # check dependencies and local setup
 
 **Quick squeeze any URL straight from the TUI** — just paste and hit Enter.
 
+---
+
+## Output Options
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `-o, --output <path>` | Write to specific file path |
+| `-f, --format <format>` | Output format: `md` (markdown), `skillzip` (zip archive), `single` (no frontmatter) |
+| `-q, --quiet` | Suppress verbose output |
+| `--no-cache` | Bypass cache, force fresh extraction |
+| `--dry-run` | Show extraction info without writing files |
+
+### Output Destination Precedence
+
+Pulp determines where to write output using this priority order:
+
+1. **`-o/--output` flag** — Explicit file path always wins
+2. **`PULP_FORCE_STDOUT=1`** — Force stdout, bypasses config (used by TUI)
+3. **`output_dir` in config** — Config file setting (~/.config/pulp/config.json)
+4. **Default** — stdout
+
+### Examples
+
+```bash
+# Explicit output file
+pulp extract https://example.com -o article.md
+pulp extract https://example.com --output article.md
+
+# Output format
+pulp extract https://example.com -f skillzip
+pulp extract https://example.com --format skillzip
+
+# Force stdout (for scripting)
+PULP_FORCE_STDOUT=1 pulp extract https://example.com
+
+# TUI uses PULP_FORCE_STDOUT internally to capture CLI output
+
+# Config sets default output directory
+pulp config set output_dir ~/Documents/pulp-output
+
+# Then extraction goes to ~/Documents/pulp-output/<slug>.md
+```
+
+---
+
 ## v0.4 Scope
 
 The supported launch surface is the CLI/TUI core:
