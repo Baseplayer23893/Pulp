@@ -246,6 +246,7 @@ func TestIsInstalled_Mock(t *testing.T) {
 
 // TestIsInstalled_NotPresent verifies IsInstalled returns false when nothing is in PATH.
 func TestIsInstalled_NotPresent(t *testing.T) {
+	ResetBinaryCache()
 	origPath := os.Getenv("PATH")
 	os.Setenv("PATH", "/nonexistent")
 	defer os.Setenv("PATH", origPath)
@@ -258,6 +259,7 @@ func TestIsInstalled_NotPresent(t *testing.T) {
 // TestParseURL_NotInstalled verifies ParseURL returns a descriptive error when
 // no defuddle binary is found.
 func TestParseURL_NotInstalled(t *testing.T) {
+	ResetBinaryCache()
 	origPath := os.Getenv("PATH")
 	os.Setenv("PATH", "/nonexistent")
 	defer os.Setenv("PATH", origPath)

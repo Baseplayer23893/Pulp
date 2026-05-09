@@ -5,7 +5,21 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync"
 )
+
+var (
+	binaryPath   string
+	binaryErr    error
+	binaryOnce   sync.Once
+)
+
+// ResetBinaryCache clears the cached binary path (for testing)
+func ResetBinaryCache() {
+	binaryOnce = sync.Once{}
+	binaryPath = ""
+	binaryErr = nil
+}
 
 // Result holds the parsed output from defuddle
 type Result struct {
@@ -34,8 +48,16 @@ func (r *Result) Validate() error {
 	return nil
 }
 
-// findBinary locates the defuddle CLI binary
+// findBinary locates the defuddle CLI binary (cached)
 func findBinary() (string, error) {
+	binaryOnce.Do(func() {
+		binaryPath, binaryErr = locateBinary()
+	})
+	return binaryPath, binaryErr
+}
+
+// locateBinary does the actual filesystem lookup
+func locateBinary() (string, error) {
 	// Check standard PATH first
 	path, err := exec.LookPath("defuddle")
 	if err == nil {
