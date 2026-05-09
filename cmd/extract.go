@@ -15,6 +15,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var jsonOutput bool
+
 var extractCmd = &cobra.Command{
 	Use:   "extract <url>",
 	Short: "Extract web page content as clean markdown",
