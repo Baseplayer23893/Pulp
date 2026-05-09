@@ -54,6 +54,7 @@ var menuItems = []menuItem{
 	{"▶ ", "YouTube Transcript", "Pull video/shorts transcript", "youtube"},
 	{"📸", "Instagram Reel", "Extract audio + caption", "instagram"},
 	{"🟠", "Reddit Post", "Post + top comments as markdown", "reddit"},
+	{"📊", "Hacker News", "HN post + top comments", "hn"},
 	{"📄", "PDF Extraction", "Extract text from PDF file", "pdf"},
 	{"📦", "Package Skill", "Create skill.zip from content", ""},
 	{"📂", "History", "View past squeezes", ""},
@@ -954,7 +955,7 @@ func (m Model) viewHistory() string {
 	s.WriteString("\n\n")
 
 	icons := map[string]string{
-		"extract": "🌐", "youtube": "▶ ", "instagram": "📸", "reddit": "🟠", "pdf": "📄",
+		"extract": "🌐", "youtube": "▶ ", "instagram": "📸", "reddit": "🟠", "hn": "📊", "pdf": "📄",
 	}
 
 	if len(entries) == 0 {
@@ -1218,8 +1219,10 @@ func detectSource(url string) int {
 		return 2
 	case strings.Contains(u, "reddit.com"):
 		return 3
-	case strings.HasSuffix(u, ".pdf"):
+	case strings.Contains(u, "news.ycombinator.com"):
 		return 4
+	case strings.HasSuffix(u, ".pdf"):
+		return 5
 	default:
 		return 0
 	}
@@ -1238,6 +1241,8 @@ func detectEngine(url string) string {
 	case 3:
 		return "reddit JSON API"
 	case 4:
+		return "HN Firebase API"
+	case 5:
 		return "go-pdf"
 	default:
 		return "defuddle → markdown cleaner"

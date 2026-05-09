@@ -23,7 +23,8 @@ func TestDetectSource(t *testing.T) {
 		{name: "youtube", url: "https://youtu.be/abc", want: 1},
 		{name: "instagram", url: "https://instagram.com/reel/x", want: 2},
 		{name: "reddit", url: "https://reddit.com/r/golang", want: 3},
-		{name: "pdf", url: "https://example.com/file.PDF", want: 4},
+		{name: "hn", url: "https://news.ycombinator.com/item?id=123", want: 4},
+		{name: "pdf", url: "https://example.com/file.PDF", want: 5},
 		{name: "default web", url: "https://example.com", want: 0},
 	}
 
