@@ -6,15 +6,15 @@ import (
 
 	"github.com/Baseplayer23893/Pulp/cmd/tui"
 	"github.com/Baseplayer23893/Pulp/internal/config"
+	"github.com/Baseplayer23893/Pulp/internal/version"
 	"github.com/spf13/cobra"
 )
 
-const version = "0.3.1"
-
 var (
-	outputFlag string
+	outputFlag  string
 	formatFlag string
 	quietFlag  bool
+	noCache    bool
 )
 
 var rootCmd = &cobra.Command{
@@ -34,7 +34,7 @@ Uses defuddle under the hood for high-quality content extraction.
 		}
 		return cmd.Help()
 	},
-	Version: version,
+	Version: version.Version,
 	CompletionOptions: cobra.CompletionOptions{
 		DisableDefaultCmd: true,
 	},
@@ -139,8 +139,9 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&outputFlag, "output", "o", "", "Output file location")
 	rootCmd.PersistentFlags().StringVarP(&formatFlag, "format", "f", cfg.DefaultFormat, "Output format: md, skillzip, single")
 	rootCmd.PersistentFlags().BoolVarP(&quietFlag, "quiet", "q", false, "Suppress verbose output")
+	rootCmd.PersistentFlags().BoolVar(&noCache, "no-cache", false, "Bypass cache and force fresh extraction")
 
-	rootCmd.SetVersionTemplate(fmt.Sprintf("Pulp v%s\n", version))
+	rootCmd.SetVersionTemplate(fmt.Sprintf("Pulp v%s\n", version.Version))
 
 	// Register TUI commands
 	rootCmd.AddCommand(tuiCmd)

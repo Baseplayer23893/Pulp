@@ -11,6 +11,7 @@ import (
 	"github.com/Baseplayer23893/Pulp/internal/cleaner"
 	"github.com/Baseplayer23893/Pulp/internal/defuddle"
 	"github.com/Baseplayer23893/Pulp/internal/urlutil"
+	"github.com/Baseplayer23893/Pulp/internal/version"
 )
 
 // ---------------------------------------------------------------------------
@@ -228,7 +229,7 @@ func handleInitialize(req jsonRPCRequest) jsonRPCResponse {
 			},
 			"serverInfo": map[string]string{
 				"name":    "pulp",
-				"version": "0.3.1",
+				"version": version.Version,
 			},
 		},
 	}

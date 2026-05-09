@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/Baseplayer23893/Pulp/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +46,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprint(w, `{"status":"ok","version":"`+version+`"}`)
+	fmt.Fprint(w, `{"status":"ok","version":"`+version.Version+`"}`)
 }
 
 func handleAPIExtract(w http.ResponseWriter, r *http.Request) {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Baseplayer23893/Pulp/internal/cache"
 	"github.com/Baseplayer23893/Pulp/internal/cleaner"
 	"github.com/Baseplayer23893/Pulp/internal/storage"
 	"github.com/spf13/cobra"
@@ -80,56 +81,98 @@ func runInstagram(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "📸 Extracting Instagram Reel: %s\n", url)
 	}
 
-	// Check yt-dlp is available
-	ytdlp, err := exec.LookPath("yt-dlp")
-	if err != nil {
-		return fmt.Errorf("yt-dlp not found\nInstall with: pipx install yt-dlp")
-	}
-
 	start := time.Now()
 
-	// Get reel info as JSON
-	infoCmd := exec.Command(ytdlp, "--dump-json", "--no-download", url)
-	infoOut, err := infoCmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to get reel info: %w\nMake sure the URL is a valid Instagram Reel/Post", err)
+	// Check cache (unless --no-cache is set)
+	var transcript string
+	var description string
+	var info *InstagramInfo
+
+	if !noCache {
+		if cached, err := cache.Get(url); err == nil {
+			if !quietFlag {
+				fmt.Fprintf(os.Stderr, "📋 Using cached result\n")
+			}
+			// For cached content, we just have the raw transcript + description
+			// Parse from cached format: "transcript|||description"
+			parts := strings.SplitN(cached, "|||", 2)
+			if len(parts) > 0 {
+				transcript = parts[0]
+			}
+			if len(parts) > 1 {
+				description = parts[1]
+			}
+		}
 	}
 
-	var info InstagramInfo
-	if err := json.Unmarshal(infoOut, &info); err != nil {
-		return fmt.Errorf("failed to parse reel info: %w", err)
-	}
+	// If no cached content, extract fresh
+	if description == "" && transcript == "" {
+		// Check yt-dlp is available
+		ytdlp, err := exec.LookPath("yt-dlp")
+		if err != nil {
+			return fmt.Errorf("yt-dlp not found\nInstall with: pipx install yt-dlp")
+		}
 
-	// Attempt to extract audio transcription
-	transcript := extractInstagramTranscript(ytdlp, url)
+		// Get reel info as JSON
+		infoCmd := exec.Command(ytdlp, "--dump-json", "--no-download", url)
+		infoOut, err := infoCmd.Output()
+		if err != nil {
+			return fmt.Errorf("failed to get reel info: %w\nMake sure the URL is a valid Instagram Reel/Post", err)
+		}
+
+		info = &InstagramInfo{}
+		if err := json.Unmarshal(infoOut, info); err != nil {
+			return fmt.Errorf("failed to parse reel info: %w", err)
+		}
+
+		// Attempt to extract audio transcription
+		transcript = extractInstagramTranscript(ytdlp, url)
+		description = info.Description
+
+		// Cache the core content (transcript + description)
+		if !noCache {
+			cacheContent := transcript + "|||" + description
+			cache.Set(url, cacheContent, cache.DefaultTTL)
+		}
+	}
 
 	// Build markdown output
 	var sb strings.Builder
 
-	title := info.Title
-	uploaderHandle := coalesce(info.UploaderID, info.ChannelID, info.Channel, info.Uploader)
-	if title == "" {
-		title = fmt.Sprintf("Instagram Reel by @%s", uploaderHandle)
+	title := "Instagram Reel"
+	uploaderHandle := "unknown"
+
+	if info != nil {
+		title = info.Title
+		uploaderHandle = coalesce(info.UploaderID, info.ChannelID, info.Channel, info.Uploader)
+		if title == "" {
+			title = fmt.Sprintf("Instagram Reel by @%s", uploaderHandle)
+		}
+
+		sb.WriteString(fmt.Sprintf("# %s\n\n", title))
+		sb.WriteString(fmt.Sprintf("**Author:** @%s\n", uploaderHandle))
+		if info.Duration > 0 {
+			sb.WriteString(fmt.Sprintf("**Duration:** %s\n", formatDuration(info.Duration)))
+		}
+		if info.LikeCount > 0 {
+			sb.WriteString(fmt.Sprintf("**Likes:** %s\n", formatCount(info.LikeCount)))
+		}
+		if info.CommentCount > 0 {
+			sb.WriteString(fmt.Sprintf("**Comments:** %s\n", formatCount(info.CommentCount)))
+		}
+		if info.ViewCount > 0 {
+			sb.WriteString(fmt.Sprintf("**Views:** %s\n", formatCount(info.ViewCount)))
+		}
+		if info.Timestamp > 0 {
+			t := time.Unix(info.Timestamp, 0)
+			sb.WriteString(fmt.Sprintf("**Posted:** %s\n", t.Format("2006-01-02")))
+		}
+	} else {
+		// Cached content - limited metadata
+		sb.WriteString(fmt.Sprintf("# %s\n\n", title))
+		sb.WriteString(fmt.Sprintf("**Author:** @%s\n", uploaderHandle))
 	}
 
-	sb.WriteString(fmt.Sprintf("# %s\n\n", title))
-	sb.WriteString(fmt.Sprintf("**Author:** @%s\n", uploaderHandle))
-	if info.Duration > 0 {
-		sb.WriteString(fmt.Sprintf("**Duration:** %s\n", formatDuration(info.Duration)))
-	}
-	if info.LikeCount > 0 {
-		sb.WriteString(fmt.Sprintf("**Likes:** %s\n", formatCount(info.LikeCount)))
-	}
-	if info.CommentCount > 0 {
-		sb.WriteString(fmt.Sprintf("**Comments:** %s\n", formatCount(info.CommentCount)))
-	}
-	if info.ViewCount > 0 {
-		sb.WriteString(fmt.Sprintf("**Views:** %s\n", formatCount(info.ViewCount)))
-	}
-	if info.Timestamp > 0 {
-		t := time.Unix(info.Timestamp, 0)
-		sb.WriteString(fmt.Sprintf("**Posted:** %s\n", t.Format("2006-01-02")))
-	}
 	sb.WriteString(fmt.Sprintf("**Source:** %s\n\n", url))
 	sb.WriteString("---\n\n")
 
@@ -141,14 +184,14 @@ func runInstagram(cmd *cobra.Command, args []string) error {
 	}
 
 	// Caption section
-	if info.Description != "" {
+	if description != "" {
 		sb.WriteString("## Caption\n\n")
-		caption := formatInstagramCaption(info.Description)
+		caption := formatInstagramCaption(description)
 		sb.WriteString(caption)
 		sb.WriteString("\n\n")
 
 		// Extract and list hashtags
-		hashtags := extractHashtags(info.Description)
+		hashtags := extractHashtags(description)
 		if len(hashtags) > 0 {
 			sb.WriteString("## Hashtags\n\n")
 			sb.WriteString(strings.Join(hashtags, " "))

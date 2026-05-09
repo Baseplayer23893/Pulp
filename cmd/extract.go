@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Baseplayer23893/Pulp/internal/cache"
 	"github.com/Baseplayer23893/Pulp/internal/cleaner"
 	"github.com/Baseplayer23893/Pulp/internal/defuddle"
 	"github.com/Baseplayer23893/Pulp/internal/storage"
@@ -40,65 +41,91 @@ func runExtract(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "⚡ Extracting: %s\n", url)
 	}
 
-	// Check defuddle is available
-	if !defuddle.IsInstalled() {
-		return fmt.Errorf("defuddle is not installed\nInstall with: npm install -g defuddle")
-	}
-
 	start := time.Now()
 
-	// Extract with defuddle
-	result, err := defuddle.ParseURL(url)
-	if err != nil {
-		return fmt.Errorf("extraction failed: %w", err)
+	// Check cache (unless --no-cache is set)
+	var markdown string
+	var result *defuddle.Result
+	if !noCache {
+		if cached, err := cache.Get(url); err == nil {
+			if !quietFlag {
+				fmt.Fprintf(os.Stderr, "📋 Using cached result\n")
+			}
+			markdown = cached
+		}
 	}
 
-	// Get the markdown content
-	markdown := result.Markdown
+	// If no cached content, extract fresh
 	if markdown == "" {
-		markdown = result.Content
-	}
-	if markdown == "" {
-		return fmt.Errorf("no content extracted from %s", url)
-	}
+		// Check defuddle is available
+		if !defuddle.IsInstalled() {
+			return fmt.Errorf("defuddle is not installed\nInstall with: npm install -g defuddle")
+		}
 
-	// Clean the markdown
-	markdown = cleaner.Clean(markdown)
+		// Extract with defuddle
+		result, err = defuddle.ParseURL(url)
+		if err != nil {
+			return fmt.Errorf("extraction failed: %w", err)
+		}
+
+		// Get the markdown content
+		markdown = result.Markdown
+		if markdown == "" {
+			markdown = result.Content
+		}
+		if markdown == "" {
+			return fmt.Errorf("no content extracted from %s", url)
+		}
+
+		// Clean the markdown
+		markdown = cleaner.Clean(markdown)
+
+		// Cache the cleaned markdown (unless --no-cache)
+		if !noCache {
+			cache.Set(url, markdown, cache.DefaultTTL)
+		}
+	}
 
 	// Build output based on format
 	var output string
 	switch formatFlag {
 	case "md":
-		// Add frontmatter
 		meta := map[string]string{
 			"source":  url,
 			"created": time.Now().Format("2006-01-02"),
 		}
-		if result.Title != "" {
-			meta["title"] = result.Title
-		}
-		if result.Description != "" {
-			desc := result.Description
-			if len(desc) > 120 {
-				desc = desc[:120] + "..."
+		if result != nil {
+			if result.Title != "" {
+				meta["title"] = result.Title
 			}
-			meta["description"] = desc
-		}
-		if result.Author != "" {
-			meta["author"] = result.Author
-		}
-		if result.Domain != "" {
-			meta["domain"] = result.Domain
+			if result.Description != "" {
+				desc := result.Description
+				if len(desc) > 120 {
+					desc = desc[:120] + "..."
+				}
+				meta["description"] = desc
+			}
+			if result.Author != "" {
+				meta["author"] = result.Author
+			}
+			if result.Domain != "" {
+				meta["domain"] = result.Domain
+			}
 		}
 
 		output = cleaner.AddFrontmatter(markdown, meta)
 
 	case "skillzip":
-		name := result.Title
+		name := ""
+		description := ""
+		if result != nil {
+			name = result.Title
+			description = result.Description
+		}
 		if name == "" {
 			name = sanitizeURLToName(url)
 		}
-		frontmatter := storage.GenerateFrontmatter(name, result.Description, url, nil)
+		frontmatter := storage.GenerateFrontmatter(name, description, url, nil)
 		content := frontmatter + "# " + name + "\n\n" + markdown
 
 		zipDir := "."

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Baseplayer23893/Pulp/internal/cache"
 	"github.com/Baseplayer23893/Pulp/internal/cleaner"
 	"github.com/Baseplayer23893/Pulp/internal/storage"
 	"github.com/Baseplayer23893/Pulp/internal/urlutil"
@@ -67,48 +68,78 @@ func runYoutube(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "🎬 Extracting YouTube transcript: %s\n", url)
 	}
 
-	// Check yt-dlp is available
-	ytdlp, err := exec.LookPath("yt-dlp")
-	if err != nil {
-		return fmt.Errorf("yt-dlp not found\nInstall with: pipx install yt-dlp")
-	}
-
 	start := time.Now()
 
-	// Get video info as JSON
-	infoCmd := exec.Command(ytdlp, "--dump-json", "--no-download", url)
-	infoOut, err := infoCmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to get video info: %w", err)
+	// Check cache (unless --no-cache is set)
+	var transcript string
+	var info *YouTubeInfo
+	if !noCache {
+		if cached, err := cache.Get(url); err == nil {
+			if !quietFlag {
+				fmt.Fprintf(os.Stderr, "📋 Using cached result\n")
+			}
+			transcript = cached
+		}
 	}
 
-	var info YouTubeInfo
-	if err := json.Unmarshal(infoOut, &info); err != nil {
-		return fmt.Errorf("failed to parse video info: %w", err)
-	}
-
-	// Extract subtitles/transcript
-	transcript, err := extractTranscript(ytdlp, url)
-	if err != nil {
-		return fmt.Errorf("failed to extract transcript: %w", err)
-	}
-
+	// If no cached content, extract fresh
 	if transcript == "" {
-		return fmt.Errorf("no transcript available for this video")
+		// Check yt-dlp is available
+		ytdlp, err := exec.LookPath("yt-dlp")
+		if err != nil {
+			return fmt.Errorf("yt-dlp not found\nInstall with: pipx install yt-dlp")
+		}
+
+		// Get video info as JSON
+		infoCmd := exec.Command(ytdlp, "--dump-json", "--no-download", url)
+		infoOut, err := infoCmd.Output()
+		if err != nil {
+			return fmt.Errorf("failed to get video info: %w", err)
+		}
+
+		info = &YouTubeInfo{}
+		if err := json.Unmarshal(infoOut, info); err != nil {
+			return fmt.Errorf("failed to parse video info: %w", err)
+		}
+
+		// Extract subtitles/transcript
+		transcript, err = extractTranscript(ytdlp, url)
+		if err != nil {
+			return fmt.Errorf("failed to extract transcript: %w", err)
+		}
+
+		if transcript == "" {
+			return fmt.Errorf("no transcript available for this video")
+		}
+
+		// Clean transcript
+		transcript = cleanTranscript(transcript)
+
+		// Cache the cleaned transcript (unless --no-cache)
+		if !noCache {
+			cache.Set(url, transcript, cache.DefaultTTL)
+		}
 	}
-
-	// Clean transcript
-	transcript = cleanTranscript(transcript)
-
-	// Format duration
-	duration := formatDuration(info.Duration)
 
 	// Build markdown output
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("# %s\n\n", info.Title))
-	sb.WriteString(fmt.Sprintf("**Channel:** %s\n", info.Channel))
-	if info.UploadDate != "" {
-		sb.WriteString(fmt.Sprintf("**Published:** %s\n", formatDate(info.UploadDate)))
+
+	title := "YouTube Video"
+	channel := "Unknown"
+	uploadDate := ""
+	duration := "Unknown"
+
+	if info != nil {
+		title = info.Title
+		channel = info.Channel
+		uploadDate = info.UploadDate
+		duration = formatDuration(info.Duration)
+	}
+
+	sb.WriteString(fmt.Sprintf("# %s\n\n", title))
+	sb.WriteString(fmt.Sprintf("**Channel:** %s\n", channel))
+	if uploadDate != "" {
+		sb.WriteString(fmt.Sprintf("**Published:** %s\n", formatDate(uploadDate)))
 	}
 	sb.WriteString(fmt.Sprintf("**Duration:** %s\n", duration))
 	sb.WriteString(fmt.Sprintf("**Source:** %s\n\n", url))
@@ -123,8 +154,8 @@ func runYoutube(cmd *cobra.Command, args []string) error {
 	meta := map[string]string{
 		"source":  url,
 		"created": time.Now().Format("2006-01-02"),
-		"title":   info.Title,
-		"channel": info.Channel,
+		"title":   title,
+		"channel": channel,
 		"type":    "youtube-transcript",
 	}
 	output := cleaner.AddFrontmatter(markdown, meta)
