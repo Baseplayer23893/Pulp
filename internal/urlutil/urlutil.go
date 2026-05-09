@@ -3,8 +3,11 @@ package urlutil
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 )
+
+var slugCleaner = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
 // NormalizeURL normalizes a raw URL string by prepending https:// if no scheme is present.
 // It returns a user-friendly error if the input is clearly not a valid web URL.
@@ -42,4 +45,40 @@ func NormalizeURL(raw string) (string, error) {
 		return "", fmt.Errorf("invalid URL: missing host %q", raw)
 	}
 	return full, nil
+}
+
+// SlugFromURL converts a URL or raw string into a filename-safe slug.
+// If the input is empty, returns "output".
+// For URLs, extracts the meaningful path component or falls back to host.
+// Strips non-alphanumeric characters and trims trailing punctuation.
+func SlugFromURL(raw string) string {
+	candidate := strings.TrimSpace(raw)
+	if candidate == "" {
+		return "output"
+	}
+
+	// Try to parse as URL
+	if parsed, err := url.Parse(candidate); err == nil && parsed.Host != "" {
+		p := strings.Trim(parsed.Path, "/")
+		if p != "" {
+			last := strings.Split(p, "/")
+			lastPart := last[len(last)-1]
+			lastPart = strings.Split(lastPart, "?")[0]
+			lastPart = strings.Split(lastPart, "#")[0]
+			if lastPart != "" && lastPart != "." && lastPart != "/" {
+				candidate = lastPart
+			} else {
+				candidate = parsed.Host
+			}
+		} else {
+			candidate = parsed.Host
+		}
+	}
+
+	candidate = slugCleaner.ReplaceAllString(candidate, "-")
+	candidate = strings.Trim(candidate, "-._")
+	if candidate == "" {
+		return "output"
+	}
+	return candidate
 }

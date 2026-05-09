@@ -123,7 +123,7 @@ func runExtract(cmd *cobra.Command, args []string) error {
 			description = result.Description
 		}
 		if name == "" {
-			name = sanitizeURLToName(url)
+			name = urlutil.SlugFromURL(url)
 		}
 		frontmatter := storage.GenerateFrontmatter(name, description, url, nil)
 		content := frontmatter + "# " + name + "\n\n" + markdown
@@ -165,18 +165,4 @@ func runExtract(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func sanitizeURLToName(rawURL string) string {
-	// Extract meaningful name from URL
-	name := rawURL
-	name = strings.TrimPrefix(name, "https://")
-	name = strings.TrimPrefix(name, "http://")
-	name = strings.TrimPrefix(name, "www.")
-	name = strings.Split(name, "?")[0]
-	name = strings.TrimSuffix(name, "/")
-	name = strings.ReplaceAll(name, "/", "-")
-	name = strings.ReplaceAll(name, ".", "-")
-	if len(name) > 60 {
-		name = name[:60]
-	}
-	return name
-}
+

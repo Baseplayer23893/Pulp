@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -27,7 +25,6 @@ import (
 var (
 	writeClipboard = clipboard.WriteAll
 	readClipboard  = clipboard.ReadAll
-	slugCleaner    = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 )
 
 // ── State machine ──
@@ -578,7 +575,7 @@ func saveResultOutput(source string, content string) (string, error) {
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return "", fmt.Errorf("create output directory %s: %w", outDir, err)
 	}
-	out := filepath.Join(outDir, outputSlugFromInput(source)+".md")
+	out := filepath.Join(outDir, urlutil.SlugFromURL(source)+".md")
 	if err := os.WriteFile(out, []byte(content), 0644); err != nil {
 		return "", err
 	}
@@ -883,7 +880,7 @@ func (m Model) viewResult() string {
 			wd, _ := os.Getwd()
 			outDir = wd
 		}
-		saveHint := lipgloss.NewStyle().Foreground(colorMuted).Render(fmt.Sprintf("  Save target: %s", filepath.Join(outDir, outputSlugFromInput(m.squeezeURL)+".md")))
+		saveHint := lipgloss.NewStyle().Foreground(colorMuted).Render(fmt.Sprintf("  Save target: %s", filepath.Join(outDir, urlutil.SlugFromURL(m.squeezeURL)+".md")))
 		s.WriteString(saveHint)
 		s.WriteString("\n\n")
 
@@ -1274,32 +1271,4 @@ func normalizeKey(key string) string {
 	return key
 }
 
-func outputSlugFromInput(raw string) string {
-	candidate := strings.TrimSpace(raw)
-	if candidate == "" {
-		return "output"
-	}
 
-	if parsed, err := url.Parse(candidate); err == nil && parsed.Host != "" {
-		p := strings.Trim(parsed.Path, "/")
-		if p != "" {
-			last := filepath.Base(p)
-			last = strings.Split(last, "?")[0]
-			last = strings.Split(last, "#")[0]
-			if last != "" && last != "." && last != "/" {
-				candidate = last
-			} else {
-				candidate = parsed.Host
-			}
-		} else {
-			candidate = parsed.Host
-		}
-	}
-
-	candidate = slugCleaner.ReplaceAllString(candidate, "-")
-	candidate = strings.Trim(candidate, "-._")
-	if candidate == "" {
-		return "output"
-	}
-	return candidate
-}
