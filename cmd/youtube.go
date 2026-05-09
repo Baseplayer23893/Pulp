@@ -116,7 +116,7 @@ func runYoutube(cmd *cobra.Command, args []string) error {
 		transcript = cleanTranscript(transcript)
 
 		// Cache the cleaned transcript (unless --no-cache)
-		if !noCache {
+		if !noCache && !dryRun {
 			cache.Set(url, transcript, cache.DefaultTTL)
 		}
 	}
@@ -149,6 +149,20 @@ func runYoutube(cmd *cobra.Command, args []string) error {
 	sb.WriteString("\n")
 
 	markdown := sb.String()
+
+	// Dry-run: just print info and exit
+	if dryRun {
+		wordCount := len(strings.Fields(transcript))
+		outPath := "stdout"
+		if targetOutput != "" {
+			outPath = targetOutput
+		}
+		fmt.Printf("title: %s\n", title)
+		fmt.Printf("wordCount: %d\n", wordCount)
+		fmt.Printf("sourceType: youtube\n")
+		fmt.Printf("outputPath: %s\n", outPath)
+		return nil
+	}
 
 	// Add frontmatter
 	meta := map[string]string{

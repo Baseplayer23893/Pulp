@@ -15,6 +15,8 @@ var (
 	formatFlag string
 	quietFlag  bool
 	noCache    bool
+	jsonFlag   bool
+	dryRun     bool
 )
 
 var rootCmd = &cobra.Command{
@@ -140,6 +142,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&formatFlag, "format", "f", cfg.DefaultFormat, "Output format: md, skillzip, single")
 	rootCmd.PersistentFlags().BoolVarP(&quietFlag, "quiet", "q", false, "Suppress verbose output")
 	rootCmd.PersistentFlags().BoolVar(&noCache, "no-cache", false, "Bypass cache and force fresh extraction")
+	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "Show output info without writing files")
 
 	rootCmd.SetVersionTemplate(fmt.Sprintf("Pulp v%s\n", version.Version))
 

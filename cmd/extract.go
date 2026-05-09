@@ -83,7 +83,7 @@ func runExtract(cmd *cobra.Command, args []string) error {
 		markdown = cleaner.Clean(markdown)
 
 		// Cache the cleaned markdown (unless --no-cache)
-		if !noCache {
+		if !noCache && !dryRun {
 			cache.Set(url, markdown, cache.DefaultTTL)
 		}
 	}
@@ -127,6 +127,21 @@ func runExtract(cmd *cobra.Command, args []string) error {
 		if name == "" {
 			name = urlutil.SlugFromURL(url)
 		}
+
+		// Dry-run for skillzip
+		if dryRun {
+			wordCount := len(strings.Fields(markdown))
+			outPath := "skill.zip"
+			if targetOutput != "" {
+				outPath = filepath.Base(targetOutput)
+			}
+			fmt.Printf("title: %s\n", name)
+			fmt.Printf("wordCount: %d\n", wordCount)
+			fmt.Printf("sourceType: web\n")
+			fmt.Printf("outputPath: %s\n", outPath)
+			return nil
+		}
+
 		frontmatter := storage.GenerateFrontmatter(name, description, url, nil)
 		content := frontmatter + "# " + name + "\n\n" + markdown
 
@@ -147,6 +162,24 @@ func runExtract(cmd *cobra.Command, args []string) error {
 
 	default:
 		output = markdown
+	}
+
+	// Dry-run: just print info and exit
+	if dryRun {
+		title := "web"
+		if result != nil && result.Title != "" {
+			title = result.Title
+		}
+		wordCount := len(strings.Fields(markdown))
+		outPath := "stdout"
+		if targetOutput != "" {
+			outPath = targetOutput
+		}
+		fmt.Printf("title: %s\n", title)
+		fmt.Printf("wordCount: %d\n", wordCount)
+		fmt.Printf("sourceType: web\n")
+		fmt.Printf("outputPath: %s\n", outPath)
+		return nil
 	}
 
 	// Write output

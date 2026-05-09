@@ -247,6 +247,20 @@ func runReddit(cmd *cobra.Command, args []string) error {
 
 	markdown := sb.String()
 
+	// Dry-run: just print info and exit
+	if dryRun {
+		wordCount := len(strings.Fields(markdown))
+		outPath := "stdout"
+		if targetOutput != "" {
+			outPath = targetOutput
+		}
+		fmt.Printf("title: %s\n", post.Title)
+		fmt.Printf("wordCount: %d\n", wordCount)
+		fmt.Printf("sourceType: reddit\n")
+		fmt.Printf("outputPath: %s\n", outPath)
+		return nil
+	}
+
 	// Add frontmatter
 	meta := map[string]string{
 		"source":    url,

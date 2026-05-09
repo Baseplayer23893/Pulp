@@ -86,7 +86,7 @@ func runPDF(cmd *cobra.Command, args []string) error {
 		}
 
 		// Cache the cleaned markdown (unless --no-cache)
-		if !noCache {
+		if !noCache && !dryRun {
 			cache.Set(absPath, markdown, cache.DefaultTTL)
 		}
 	}
@@ -98,6 +98,20 @@ func runPDF(cmd *cobra.Command, args []string) error {
 	}
 
 	output := cleaner.AddFrontmatter(markdown, meta)
+
+	// Dry-run: just print info and exit
+	if dryRun {
+		wordCount := len(strings.Fields(markdown))
+		outPath := "stdout"
+		if targetOutput != "" {
+			outPath = targetOutput
+		}
+		fmt.Printf("title: %s\n", filePath)
+		fmt.Printf("wordCount: %d\n", wordCount)
+		fmt.Printf("sourceType: pdf\n")
+		fmt.Printf("outputPath: %s\n", outPath)
+		return nil
+	}
 
 	if err := storage.WriteOutput(output, targetOutput); err != nil {
 		return err

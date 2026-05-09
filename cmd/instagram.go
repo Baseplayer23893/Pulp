@@ -130,7 +130,7 @@ func runInstagram(cmd *cobra.Command, args []string) error {
 		description = info.Description
 
 		// Cache the core content (transcript + description)
-		if !noCache {
+		if !noCache && !dryRun {
 			cacheContent := transcript + "|||" + description
 			cache.Set(url, cacheContent, cache.DefaultTTL)
 		}
@@ -200,6 +200,20 @@ func runInstagram(cmd *cobra.Command, args []string) error {
 	}
 
 	markdown := sb.String()
+
+	// Dry-run: just print info and exit
+	if dryRun {
+		wordCount := len(strings.Fields(markdown))
+		outPath := "stdout"
+		if targetOutput != "" {
+			outPath = targetOutput
+		}
+		fmt.Printf("title: %s\n", title)
+		fmt.Printf("wordCount: %d\n", wordCount)
+		fmt.Printf("sourceType: instagram\n")
+		fmt.Printf("outputPath: %s\n", outPath)
+		return nil
+	}
 
 	// Add frontmatter
 	meta := map[string]string{
